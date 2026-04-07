@@ -10,11 +10,11 @@ from deepface import DeepFace
 DB_PATH          = "my_database"
 MODEL_NAME       = "ArcFace"
 DETECTOR_BACKEND = "opencv"      # "retinaface" for better accuracy, slower
-DISTANCE_THRESH  = 0.40
-SAVE_COOLDOWN    = 20            # seconds before re-saving same zone
-NUM_WORKERS      = 2
+DISTANCE_THRESH  = 0.55
+SAVE_COOLDOWN    = 30            # seconds before re-saving same zone
+NUM_WORKERS      = 1
 AI_EVERY_N_FRAMES = 5           # AI runs every 5 frames; tracker handles rest
-GRID_CELL        = 80
+GRID_CELL        = 200
 # ──────────────────────────────────────────────────────────────────────────────
 
 os.makedirs(DB_PATH, exist_ok=True)
