@@ -1,0 +1,12 @@
+
+#Create deepface environment before running it:
+# python3 -m venv deepface_env
+# Then activate that env
+# source deepface_env/bin/activate
+# Then do this the below to install all dependencies
+#pip install --upgrade pip
+#pip install -r requirements.txt
+
+opencv-contrib-python
+deepface
+numpy
