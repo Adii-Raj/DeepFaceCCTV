@@ -31,7 +31,7 @@ notify_lock      = threading.Lock()
 cooldown_map     = {}
 
 # ─── IN-MEMORY VECTOR DATABASE ────────────────────────────────────────────────
-KNOWN_FACES = {}
+KNOWN_FACES = []
 db_lock = threading.Lock()       # Prevents memory crashes when updating RAM
 processed_files = set()          # Keeps track of images we already processed
 
@@ -42,32 +42,47 @@ def cosine_distance(a, b):
     return 1 - np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
 
 def process_new_faces():
-    """Scans the folder for new images and adds them to RAM safely."""
+    """Scans subfolders for new images and adds them to RAM safely."""
     global KNOWN_FACES, processed_files
     
-    for file in os.listdir(DB_PATH):
-        if file.lower().endswith(('.png', '.jpg', '.jpeg')):
-            if file in processed_files:
-                continue # Skip files we already know
-
-            name = os.path.splitext(file)[0]
-            path = os.path.join(DB_PATH, file)
+    # Step 1: Loop through the subfolders (the Student Names)
+    for person_folder in os.listdir(DB_PATH):
+        person_path = os.path.join(DB_PATH, person_folder)
+        
+        # Skip if it's not a folder (like a hidden .DS_Store file on Mac)
+        if not os.path.isdir(person_path): 
+            continue 
             
-            try:
-                res = DeepFace.represent(
-                    img_path=path, 
-                    model_name=MODEL_NAME, 
-                    detector_backend=DETECTOR_BACKEND, 
-                    enforce_detection=True
-                )
-                if len(res) > 0:
-                    # Safely lock the database while we add the new person
-                    with db_lock:
-                        KNOWN_FACES[name] = res[0]["embedding"]
-                    processed_files.add(file)
-                    print(f"✅ Hot-Loaded new identity: {name}")
-            except Exception as e:
-                print(f"⚠️ Failed to hot-load {file}: {e}")
+        # Step 2: Loop through the images inside the student's folder
+        for file in os.listdir(person_path):
+            if file.lower().endswith(('.png', '.jpg', '.jpeg')):
+                
+                # We use the relative path as our unique tracker to avoid re-processing
+                unique_file_id = f"{person_folder}/{file}"
+                
+                if unique_file_id in processed_files:
+                    continue
+
+                full_img_path = os.path.join(person_path, file)
+                
+                try:
+                    res = DeepFace.represent(
+                        img_path=full_img_path, 
+                        model_name=MODEL_NAME, 
+                        detector_backend=DETECTOR_BACKEND, 
+                        enforce_detection=True
+                    )
+                    if len(res) > 0:
+                        with db_lock:
+                            # Save a dictionary containing the folder name and the mathematical face
+                            KNOWN_FACES.append({
+                                "name": person_folder, 
+                                "embedding": res[0]["embedding"]
+                            })
+                        processed_files.add(unique_file_id)
+                        print(f"✅ Hot-Loaded: {person_folder} ({file})")
+                except Exception as e:
+                    print(f"⚠️ Failed to hot-load {unique_file_id}: {e}")
 
 def dynamic_db_updater():
     """Background thread that checks for new faces every 60 seconds."""
@@ -119,13 +134,14 @@ def recognize(face_crop, x, y):
         best_match = "Unknown"
         best_dist = float("inf")
         
-        # Super-fast dictionary search (In RAM)
-        with db_lock:  # <--- ADD THIS LOCK
-            for name, known_emb in KNOWN_FACES.items():
-                dist = cosine_distance(target_emb, known_emb)
+       # Super-fast vector search (In RAM)
+        with db_lock:  
+            for known in KNOWN_FACES:
+                # Compare the live camera face to every known embedding
+                dist = cosine_distance(target_emb, known["embedding"])
                 if dist < best_dist:
                     best_dist = dist
-                    best_match = name
+                    best_match = known["name"] # Grabs the folder name!
                 
         if best_dist <= DISTANCE_THRESH:
             return best_match
