@@ -1,0 +1,17 @@
+# --- Python Virtual Environments ---
+deepface_env/
+venv/
+env/
+bin/
+lib/
+
+# --- DeepFace & AI related ---
+# Ignore the actual saved database images if you don't want them public
+my_database/
+# Ignore weights downloaded by DeepFace (ArcFace, etc.)
+.deepface/
+
+# --- OS specific files ---
+.DS_Store
+__pycache__/
+*.py[cod]
