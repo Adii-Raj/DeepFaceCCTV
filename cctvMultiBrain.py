@@ -32,6 +32,8 @@ cooldown_map     = {}
 
 # ─── IN-MEMORY VECTOR DATABASE ────────────────────────────────────────────────
 KNOWN_FACES = {}
+db_lock = threading.Lock()       # Prevents memory crashes when updating RAM
+processed_files = set()          # Keeps track of images we already processed
 
 def cosine_distance(a, b):
     """Calculates cosine distance between two arrays/vectors."""
@@ -39,17 +41,19 @@ def cosine_distance(a, b):
     b = np.array(b)
     return 1 - np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
 
-def init_vector_db():
-    """Loads all known faces into RAM as 512-dimensional embeddings once at startup."""
-    print("⏳ Building in-memory vector DB. Downloading/Loading models...")
-    DeepFace.build_model(MODEL_NAME) # Force model to download/build first
+def process_new_faces():
+    """Scans the folder for new images and adds them to RAM safely."""
+    global KNOWN_FACES, processed_files
     
     for file in os.listdir(DB_PATH):
         if file.lower().endswith(('.png', '.jpg', '.jpeg')):
+            if file in processed_files:
+                continue # Skip files we already know
+
             name = os.path.splitext(file)[0]
             path = os.path.join(DB_PATH, file)
+            
             try:
-                # Extract face embedding directly
                 res = DeepFace.represent(
                     img_path=path, 
                     model_name=MODEL_NAME, 
@@ -57,12 +61,25 @@ def init_vector_db():
                     enforce_detection=True
                 )
                 if len(res) > 0:
-                    KNOWN_FACES[name] = res[0]["embedding"]
-                    print(f"  → Loaded identity: {name}")
+                    # Safely lock the database while we add the new person
+                    with db_lock:
+                        KNOWN_FACES[name] = res[0]["embedding"]
+                    processed_files.add(file)
+                    print(f"✅ Hot-Loaded new identity: {name}")
             except Exception as e:
-                print(f"  ⚠️ Skipping {file}: {e}")
-                
-    print(f"✅ Loaded {len(KNOWN_FACES)} known faces into memory!\n")
+                print(f"⚠️ Failed to hot-load {file}: {e}")
+
+def dynamic_db_updater():
+    """Background thread that checks for new faces every 60 seconds."""
+    print("⏳ Initializing database...")
+    DeepFace.build_model(MODEL_NAME) 
+    process_new_faces() # Run once instantly at startup
+    print(f"✅ Database Ready! Loaded {len(KNOWN_FACES)} faces.\n")
+
+    # Now, loop forever in the background
+    while True:
+        time.sleep(60) # Wait 60 seconds
+        process_new_faces() # Check for new faces
 
 # ─── NOTIFICATION SYSTEM ──────────────────────────────────────────────────────
 def send_http_notification(zone, timestamp):
@@ -103,11 +120,12 @@ def recognize(face_crop, x, y):
         best_dist = float("inf")
         
         # Super-fast dictionary search (In RAM)
-        for name, known_emb in KNOWN_FACES.items():
-            dist = cosine_distance(target_emb, known_emb)
-            if dist < best_dist:
-                best_dist = dist
-                best_match = name
+        with db_lock:  # <--- ADD THIS LOCK
+            for name, known_emb in KNOWN_FACES.items():
+                dist = cosine_distance(target_emb, known_emb)
+                if dist < best_dist:
+                    best_dist = dist
+                    best_match = name
                 
         if best_dist <= DISTANCE_THRESH:
             return best_match
@@ -168,7 +186,8 @@ def worker_brain(worker_id):
             frame_queue.task_done()
 
 # ─── STARTUP ──────────────────────────────────────────────────────────────────
-init_vector_db()
+# Start the background database updater
+threading.Thread(target=dynamic_db_updater, daemon=True).start()
 
 for i in range(NUM_WORKERS):
     threading.Thread(target=worker_brain, args=(i,), daemon=True).start()
