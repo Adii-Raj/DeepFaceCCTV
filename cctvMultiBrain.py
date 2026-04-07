@@ -12,18 +12,16 @@ DB_PATH           = "my_database"
 MODEL_NAME        = "Facenet512"        
 DETECTOR_BACKEND  = "mtcnn"            
 DISTANCE_THRESH   = 0.30                
-NUM_WORKERS       = 2                   # Bumped to 2 workers for 4 cameras
-AI_EVERY_N_FRAMES = 10                  # Check AI every 10 frames to save CPU
+NUM_WORKERS       = 2                   
+AI_EVERY_N_FRAMES = 10                  
 GRID_CELL         = 200                 
 MAX_TRACK_FAILURES= 5                   
 
-# ─── YOUR 4 CAMERAS GO HERE ───────────────────────────────────────────────────
-# Replace these with your actual IP Webcam and VLC links!
-# You can use 0 for your laptop's built-in webcam.
+# ─── YOUR CAMERAS ─────────────────────────────────────────────────────────────
+# Updated to use the HTTP links that you proved work in your test script!
 CAMERAS = {
-    "CAM_1_PHONE_A": "rtsp://192.168.1.15:8080/h264_pcm.sdp",
-    "CAM_2_PHONE_B": "rtsp://192.168.1.16:8080/h264_pcm.sdp",
-    "CAM_3_LAPTOP" : "rtsp://192.168.1.20:8554/stream",
+    "CAM_1_PHONE_A": "http://10.148.100.223:8080/video",
+    "CAM_2_PHONE_B": "http://10.148.100.223:8080/video", # Note: Usually Phone B will have a slightly different IP!
     "CAM_4_LOCAL"  : 0  
 }
 
@@ -32,7 +30,7 @@ NOTIFY_COOLDOWN   = 30
 
 os.makedirs(DB_PATH, exist_ok=True)
 
-# ── Queues & Shared State (Now tracking per-camera) ───────────────────────────
+# ── Queues & Shared State ─────────────────────────────────────────────────────
 frame_queue      = queue.Queue(maxsize=4)
 latest_frames    = {cam: None for cam in CAMERAS}
 recognized_faces = {cam: [] for cam in CAMERAS}
@@ -264,6 +262,13 @@ while True:
         cv2.putText(frame, cam_name, (10, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
         
         drawn_frames.append(frame)
+
+    # --- THIS PREVENTS THE CRASH WHEN USING LESS THAN 4 CAMERAS ---
+    while len(drawn_frames) < 4:
+        no_signal_frame = np.zeros((480, 640, 3), dtype=np.uint8)
+        cv2.putText(no_signal_frame, "NO SIGNAL", (230, 240), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (100, 100, 100), 2)
+        drawn_frames.append(no_signal_frame)
+    # --------------------------------------------------------------
 
     # Stitch the 4 frames together (2x2 grid)
     top_row = np.hstack((drawn_frames[0], drawn_frames[1]))
