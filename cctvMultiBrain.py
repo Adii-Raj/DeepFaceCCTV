@@ -4,29 +4,22 @@ import queue
 import time
 import os
 import numpy as np
-import requests                         # pip install requests
+import requests
 from deepface import DeepFace
 
 # ─── CONFIG ───────────────────────────────────────────────────────────────────
-DB_PATH           = "my_database"       # Folder with KNOWN faces only
-MODEL_NAME        = "VGG-Face"
-DETECTOR_BACKEND  = "opencv"            # "retinaface" for better accuracy
-DISTANCE_THRESH   = 0.55
+DB_PATH           = "my_database"       
+MODEL_NAME        = "Facenet512"        # Upgraded from VGG-Face
+DETECTOR_BACKEND  = "mtcnn"            # Upgraded from opencv
+DISTANCE_THRESH   = 0.30                # Facenet512 cosine threshold is usually ~0.3
 NUM_WORKERS       = 1
-AI_EVERY_N_FRAMES = 5                   # AI runs every N frames; tracker handles rest
-GRID_CELL         = 200                 # Grid size for dedup zones
+AI_EVERY_N_FRAMES = 5                   
+GRID_CELL         = 200                 
+MAX_TRACK_FAILURES= 5                   # Drop a tracker if it loses the face for 5 frames
 
 # ─── NOTIFICATION CONFIG ──────────────────────────────────────────────────────
-# Option A: Your own Kotlin/any backend endpoint
-NOTIFY_URL        = "http://your-server.com/api/alert"   # ← change this
-
-# Option B: Firebase Cloud Messaging (uncomment + fill to use FCM instead)
-# FCM_SERVER_KEY  = "YOUR_FCM_SERVER_KEY"
-# FCM_DEVICE_TOKEN= "DEVICE_FCM_TOKEN"
-
-# How many seconds to wait before sending another alert for the same zone
-NOTIFY_COOLDOWN   = 30                  # seconds
-# ──────────────────────────────────────────────────────────────────────────────
+NOTIFY_URL        = "http://your-server.com/api/alert"
+NOTIFY_COOLDOWN   = 30
 
 os.makedirs(DB_PATH, exist_ok=True)
 
@@ -35,122 +28,97 @@ frame_queue      = queue.Queue(maxsize=2)
 recognized_faces = []
 lock             = threading.Lock()
 notify_lock      = threading.Lock()
-cooldown_map     = {}                   # zone_key → last_notify_time
+cooldown_map     = {}
 
-# ── Pre-load model ONCE at startup ────────────────────────────────────────────
-print("⏳ Loading model — please wait...")
-DeepFace.build_model(MODEL_NAME)
-print("✅ Model ready!\n")
+# ─── IN-MEMORY VECTOR DATABASE ────────────────────────────────────────────────
+KNOWN_FACES = {}
 
+def cosine_distance(a, b):
+    """Calculates cosine distance between two arrays/vectors."""
+    a = np.array(a)
+    b = np.array(b)
+    return 1 - np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
 
-# ─── NOTIFICATION: Send HTTP POST to your Kotlin/any backend ──────────────────
+def init_vector_db():
+    """Loads all known faces into RAM as 512-dimensional embeddings once at startup."""
+    print("⏳ Building in-memory vector DB. Downloading/Loading models...")
+    DeepFace.build_model(MODEL_NAME) # Force model to download/build first
+    
+    for file in os.listdir(DB_PATH):
+        if file.lower().endswith(('.png', '.jpg', '.jpeg')):
+            name = os.path.splitext(file)[0]
+            path = os.path.join(DB_PATH, file)
+            try:
+                # Extract face embedding directly
+                res = DeepFace.represent(
+                    img_path=path, 
+                    model_name=MODEL_NAME, 
+                    detector_backend=DETECTOR_BACKEND, 
+                    enforce_detection=True
+                )
+                if len(res) > 0:
+                    KNOWN_FACES[name] = res[0]["embedding"]
+                    print(f"  → Loaded identity: {name}")
+            except Exception as e:
+                print(f"  ⚠️ Skipping {file}: {e}")
+                
+    print(f"✅ Loaded {len(KNOWN_FACES)} known faces into memory!\n")
+
+# ─── NOTIFICATION SYSTEM ──────────────────────────────────────────────────────
 def send_http_notification(zone, timestamp):
-    """
-    Sends a POST request to your backend (Kotlin server or any REST API).
-    Your Kotlin server receives this and can trigger a push notification,
-    sound alarm, log to DB, etc.
-    """
-    payload = {
-        "event"    : "UNKNOWN_FACE_DETECTED",
-        "zone"     : f"{zone}",
-        "timestamp": timestamp,
-        "camera"   : "CAM_01"           # useful if you have multiple cameras
-    }
+    payload = {"event": "UNKNOWN_FACE_DETECTED", "zone": str(zone), "timestamp": timestamp}
     try:
-        response = requests.post(NOTIFY_URL, json=payload, timeout=5)
-        print(f"🔔 Notification sent → HTTP {response.status_code} | Zone {zone}")
-    except requests.exceptions.ConnectionError:
-        print(f"⚠️  Notification failed (server unreachable) | Zone {zone}")
-    except requests.exceptions.Timeout:
-        print(f"⚠️  Notification timed out | Zone {zone}")
-    except Exception as e:
-        print(f"⚠️  Notification error: {e}")
+        requests.post(NOTIFY_URL, json=payload, timeout=5)
+        print(f"🔔 Alert Sent | Zone {zone}")
+    except Exception:
+        pass # Silently fail to avoid console spam
 
-
-# ─── NOTIFICATION: Firebase FCM alternative (uncomment to use) ────────────────
-# def send_fcm_notification(zone, timestamp):
-#     headers = {
-#         "Authorization": f"key={FCM_SERVER_KEY}",
-#         "Content-Type" : "application/json"
-#     }
-#     payload = {
-#         "to": FCM_DEVICE_TOKEN,
-#         "notification": {
-#             "title": "⚠️ Unknown Person Detected",
-#             "body" : f"Zone {zone} at {timestamp}"
-#         },
-#         "data": {"zone": str(zone), "camera": "CAM_01"}
-#     }
-#     try:
-#         r = requests.post("https://fcm.googleapis.com/fcm/send",
-#                           headers=headers, json=payload, timeout=5)
-#         print(f"🔔 FCM sent → {r.status_code}")
-#     except Exception as e:
-#         print(f"⚠️  FCM error: {e}")
-
-
-# ─── ZONE KEY: Prevents spam by grouping nearby positions ─────────────────────
 def zone_key(x, y):
     return (x // GRID_CELL, y // GRID_CELL)
 
-
-# ─── MAYBE NOTIFY: Cooldown-gated notification trigger ────────────────────────
 def maybe_notify(x, y):
-    """
-    Fires a notification for an unknown face, but only once per zone
-    per NOTIFY_COOLDOWN seconds — avoids spamming your backend.
-    Runs in a background thread so it never blocks the camera loop.
-    """
     key = zone_key(x, y)
     now = time.time()
-
     with notify_lock:
         if now - cooldown_map.get(key, 0) < NOTIFY_COOLDOWN:
-            return                          # Still in cooldown, skip
+            return 
         cooldown_map[key] = now
 
     timestamp = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(now))
+    threading.Thread(target=send_http_notification, args=(key, timestamp), daemon=True).start()
 
-    # Non-blocking: send notification in background thread
-    threading.Thread(
-        target=send_http_notification,
-        args=(key, timestamp),
-        daemon=True
-    ).start()
-
-
-# ─── RECOGNIZE: Check if face belongs to a known person ──────────────────────
-def recognize(face_crop, x, y, worker_id):
-    """
-    Returns the person's name if found in DB, else "Unknown".
-    Triggers a notification for unknown faces.
-    """
+# ─── RECOGNIZE FUNCTION ───────────────────────────────────────────────────────
+def recognize(face_crop, x, y):
+    """Generates embedding for cropped face and matches via RAM dictionary."""
     try:
-        dfs = DeepFace.find(
-            img_path          = face_crop,
-            db_path           = DB_PATH,
-            model_name        = MODEL_NAME,
-            distance_metric   = "cosine",
-            enforce_detection = False,
-            silent            = True,
+        # Get embedding of the unknown face (no need to enforce detection on a crop)
+        res = DeepFace.represent(
+            img_path=face_crop, 
+            model_name=MODEL_NAME, 
+            enforce_detection=False
         )
-        df = dfs[0] if dfs else None
-        if df is not None and not df.empty:
-            row      = df.iloc[0]
-            distance = row.get("distance", 1.0)
-            if distance <= DISTANCE_THRESH:
-                name = os.path.basename(row["identity"]).split(".")[0]
-                return name                 # ✅ Known person — no alert
+        target_emb = res[0]["embedding"]
+        
+        best_match = "Unknown"
+        best_dist = float("inf")
+        
+        # Super-fast dictionary search (In RAM)
+        for name, known_emb in KNOWN_FACES.items():
+            dist = cosine_distance(target_emb, known_emb)
+            if dist < best_dist:
+                best_dist = dist
+                best_match = name
+                
+        if best_dist <= DISTANCE_THRESH:
+            return best_match
+            
+    except Exception:
+        pass # Return unknown if extraction fails
 
-    except Exception as e:
-        print(f"[W{worker_id}] recognize error: {e}")
-
-    # ── Unknown face: trigger notification (cooldown-gated) ───────────────────
     maybe_notify(x, y)
     return "Unknown"
 
-
-# ─── WORKER: Background thread that runs AI processing ────────────────────────
+# ─── AI WORKER THREAD ─────────────────────────────────────────────────────────
 def worker_brain(worker_id):
     global recognized_faces
     print(f"Worker {worker_id} online.")
@@ -159,108 +127,126 @@ def worker_brain(worker_id):
         frame = frame_queue.get()
         try:
             h_orig, w_orig = frame.shape[:2]
-            small   = cv2.resize(frame, (640, 480))
-            scale_x = w_orig / 640
-            scale_y = h_orig / 480
+            small = cv2.resize(frame, (640, 480))
+            scale_x, scale_y = w_orig / 640, h_orig / 480
 
-            # ── Detect all faces ───────────────────────────────────────────────
+            # 1. Detect faces using YOLOv8
             try:
                 faces = DeepFace.extract_faces(
-                    img_path          = small,
-                    detector_backend  = DETECTOR_BACKEND,
-                    enforce_detection = True,
-                    align             = True,
+                    img_path=small,
+                    detector_backend=DETECTOR_BACKEND,
+                    enforce_detection=True,
+                    align=True
                 )
             except ValueError:
                 faces = []
 
-            # ── Recognize each face ────────────────────────────────────────────
+            # 2. Recognize
             new_faces = []
             for face_obj in faces:
                 area = face_obj["facial_area"]
-                x = int(area["x"] * scale_x)
-                y = int(area["y"] * scale_y)
-                w = int(area["w"] * scale_x)
-                h = int(area["h"] * scale_y)
+                x, y = int(area["x"] * scale_x), int(area["y"] * scale_y)
+                w, h = int(area["w"] * scale_x), int(area["h"] * scale_y)
 
-                face_crop = frame[y:y+h, x:x+w]
-                if face_crop.size == 0:
-                    continue
+                # Expand crop slightly for better embeddings
+                pad = 10
+                y1, y2 = max(0, y-pad), min(h_orig, y+h+pad)
+                x1, x2 = max(0, x-pad), min(w_orig, x+w+pad)
+                
+                face_crop = frame[y1:y2, x1:x2]
+                if face_crop.size == 0: continue
 
-                name = recognize(face_crop, x, y, worker_id)
+                name = recognize(face_crop, x, y)
                 new_faces.append({"name": name, "box": (x, y, w, h)})
 
             with lock:
                 recognized_faces = new_faces
 
         except Exception as e:
-            print(f"[W{worker_id}] Unexpected error: {e}")
+            print(f"[W{worker_id}] Error: {e}")
         finally:
             frame_queue.task_done()
 
+# ─── STARTUP ──────────────────────────────────────────────────────────────────
+init_vector_db()
 
-# ── Spawn workers ──────────────────────────────────────────────────────────────
 for i in range(NUM_WORKERS):
-    t = threading.Thread(target=worker_brain, args=(i,), daemon=True)
-    t.start()
+    threading.Thread(target=worker_brain, args=(i,), daemon=True).start()
 
-
-# ─── TRACKER: Smooths bounding boxes between AI frames ────────────────────────
-trackers     = []
+# ─── TRACKER LOGIC ────────────────────────────────────────────────────────────
+trackers = []
 tracker_lock = threading.Lock()
+
+def get_csrt_tracker():
+    """Handles API changes between OpenCV versions."""
+    try:
+        return cv2.legacy.TrackerCSRT_create()
+    except AttributeError:
+        return cv2.TrackerCSRT_create()
 
 def rebuild_trackers(frame, ai_results):
     new_trackers = []
     for face in ai_results:
         x, y, w, h = face["box"]
-        tracker = cv2.legacy.TrackerCSRT_create()
+        tracker = get_csrt_tracker()
         tracker.init(frame, (x, y, w, h))
         new_trackers.append({
             "tracker": tracker,
-            "name"   : face["name"],
-            "box"    : (x, y, w, h)
+            "name": face["name"],
+            "failures": 0,          # Added failure counter
+            "box": (x, y, w, h)
         })
     return new_trackers
 
 def update_trackers(frame):
     updated = []
     with tracker_lock:
+        active_trackers = []
         for t in trackers:
             success, box = t["tracker"].update(frame)
             if success:
+                t["failures"] = 0   # Reset on success
                 x, y, w, h = [int(v) for v in box]
                 updated.append({"name": t["name"], "box": (x, y, w, h)})
+                active_trackers.append(t)
+            else:
+                t["failures"] += 1  # Increment on failure
+                if t["failures"] < MAX_TRACK_FAILURES:
+                    active_trackers.append(t)
+        
+        # Prune dead trackers to fix memory leak
+        trackers.clear()
+        trackers.extend(active_trackers)
     return updated
-
 
 # ─── MAIN CAMERA LOOP ─────────────────────────────────────────────────────────
 cap = cv2.VideoCapture(0)
-cap.set(cv2.CAP_PROP_FRAME_WIDTH,  1280)
+cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
 cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
-cap.set(cv2.CAP_PROP_FPS, 30)
 
 print("✅ CCTV Active. Press 'q' to quit.\n")
 
-frame_counter   = 0
+frame_counter = 0
 last_ai_results = []
-display_faces   = []
+display_faces = []
 
 while True:
     ret, frame = cap.read()
-    if not ret:
-        break
+    if not ret: break
 
     frame_counter += 1
 
-    # ── Send frame to AI worker every N frames ─────────────────────────────────
+    # Non-blocking AI dispatch
     if frame_counter % AI_EVERY_N_FRAMES == 0:
-        if not frame_queue.full():
-            frame_queue.put(frame.copy())
+        try:
+            frame_queue.put(frame.copy(), block=False)
+        except queue.Full:
+            pass # Drop frame to prevent camera lag
 
-    # ── Check for fresh AI results ─────────────────────────────────────────────
     with lock:
         current_ai = recognized_faces.copy()
 
+    # Rebuild if new AI results, otherwise update tracker
     if current_ai != last_ai_results:
         last_ai_results = current_ai
         with tracker_lock:
@@ -269,29 +255,19 @@ while True:
     else:
         display_faces = update_trackers(frame)
 
-    # ── Draw bounding boxes ────────────────────────────────────────────────────
+    # ── Draw HUD ──────────────────────────────────────────────────────────────
     for face in display_faces:
         x, y, w, h = face["box"]
-        name        = face["name"]
-        is_unknown  = name == "Unknown"
+        name = face["name"]
+        is_unknown = (name == "Unknown")
 
         color = (0, 0, 255) if is_unknown else (0, 255, 0)
-        label = "Unknown ⚠️" if is_unknown else f"✅ {name}"
+        label = "Unknown" if is_unknown else name
 
         cv2.rectangle(frame, (x, y), (x+w, y+h), color, 2)
-
-        (tw, th), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.65, 2)
-        cv2.rectangle(frame, (x, y-th-12), (x+tw+8, y), color, -1)
-        cv2.putText(frame, label, (x+4, y-5),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.65, (255, 255, 255), 2)
-
-    # ── HUD overlay ───────────────────────────────────────────────────────────
-    known_count   = sum(1 for f in display_faces if f["name"] != "Unknown")
-    unknown_count = sum(1 for f in display_faces if f["name"] == "Unknown")
-
-    cv2.putText(frame,
-                f"Frame: {frame_counter}  |  Known: {known_count}  |  Unknown: {unknown_count}",
-                (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (200, 200, 200), 2)
+        (tw, th), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)
+        cv2.rectangle(frame, (x, y-th-10), (x+tw+8, y), color, -1)
+        cv2.putText(frame, label, (x+4, y-4), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
 
     cv2.imshow("CCTV Feed", frame)
     if cv2.waitKey(1) & 0xFF == ord("q"):

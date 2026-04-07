@@ -7,6 +7,7 @@
 # Then do this the below to install all dependencies
 #pip install --upgrade pip
 #pip install -r requirement.txt
+# pip install deepface opencv-python numpy requests ultralytics ---> Need to install if using latest cctvBrain
 
 opencv-contrib-python
 deepface
