@@ -2,7 +2,8 @@
 #Create deepface environment before running it:
 # python3 -m venv deepface_env
 # Then activate that env
-# source deepface_env/bin/activate
+# source deepface_env/bin/activate     -> This for mac
+# deepface_env\Scripts\activate        -> This for windows
 # Then do this the below to install all dependencies
 #pip install --upgrade pip
 #pip install -r requirements.txt
