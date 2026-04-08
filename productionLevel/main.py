@@ -2,9 +2,9 @@
 import multiprocessing as mp
 # ADD THIS IMPORT:
 import ctypes 
-from RealDeepFace.productionLevel.config import CAMERAS
-from RealDeepFace.productionLevel.eyes import start_camera_worker
-from RealDeepFace.productionLevel.brain import start_ai_worker
+from config import CAMERAS
+from eyes import start_camera_worker
+from brain import start_ai_worker
 
 if __name__ == '__main__':
     mp.set_start_method('spawn', force=True)

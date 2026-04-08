@@ -1,7 +1,7 @@
 # eyes.py
 import cv2
 import time
-from RealDeepFace.productionLevel.config import HAAR_CASCADE_PATH
+from config import HAAR_CASCADE_PATH
 
 def start_camera_worker(cam_name, url, face_queue, result_queue, cache_counter):
     print(f"[EYES] 👀 Starting vision on {cam_name}...")

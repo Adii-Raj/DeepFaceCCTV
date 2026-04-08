@@ -3,7 +3,7 @@ import time
 import os
 import numpy as np
 from deepface import DeepFace
-from RealDeepFace.productionLevel.config import DB_PATH, MODEL_NAME, DETECTOR_BACKEND, DISTANCE_THRESH
+from config import DB_PATH, MODEL_NAME, DETECTOR_BACKEND, DISTANCE_THRESH
 
 KNOWN_FACES = []
 
