@@ -3,7 +3,7 @@ import time
 import os
 import numpy as np
 from deepface import DeepFace
-from config import DB_PATH, MODEL_NAME, DETECTOR_BACKEND, DISTANCE_THRESH
+from config import DB_PATH, MODEL_NAME, DETECTOR_BACKEND, DISTANCE_THRESH, WAITING_TIME
 
 KNOWN_FACES = []
 
@@ -34,7 +34,7 @@ def load_database():
                 except Exception as e:
                     pass
 
-def start_ai_worker(face_queue, result_queue, cache_counter): # <-- Added result_queue here
+def start_ai_worker(face_queue, result_queue, cache_counter):
     load_database()
     print("[BRAIN] 🧠 AI Worker active. Waiting for faces...")
     
@@ -43,16 +43,32 @@ def start_ai_worker(face_queue, result_queue, cache_counter): # <-- Added result
     while True:
         cam_name, face_crop, timestamp = face_queue.get()
         
-        # --- ADD THIS: Safely subtract -1 and print the status ---
         with cache_counter.get_lock():
             cache_counter.value -= 1
             current_cache = cache_counter.value
             
         print(f"⚙️ [PROCESSING] AI grabbing face from {cam_name}. (Faces waiting in cache: {current_cache})")
-        # ---------------------------------------------------------
 
         try:
-            res = DeepFace.represent(img_path=face_crop, model_name=MODEL_NAME, detector_backend=DETECTOR_BACKEND, enforce_detection=False)
+            # Run DeepFace with Anti-Spoofing on the LIVE face
+            res = DeepFace.represent(
+                img_path=face_crop, 
+                model_name=MODEL_NAME, 
+                detector_backend=DETECTOR_BACKEND, 
+                enforce_detection=False,
+                anti_spoofing=True,
+                align=True  #You can remove this line(it is used to scan 3d view)
+            )
+            
+            # Check if DeepFace thinks this is a painting or a photo
+            is_real = res[0].get("is_real", True) 
+            
+            if not is_real:
+                print(f"⚠️ [SECURITY] Detected a fake face / painting on {cam_name} at {timestamp}")
+                try: result_queue.put_nowait((cam_name, "SPOOF_DETECTED"))
+                except Exception: pass
+                continue # Skip the rest of the matching logic
+                
             target_emb = res[0]["embedding"]
             best_match, best_dist = "Unknown", float("inf")
             
@@ -63,17 +79,14 @@ def start_ai_worker(face_queue, result_queue, cache_counter): # <-- Added result
             
             if best_dist <= DISTANCE_THRESH:
                 
-                # --- TO REMOVE LATER: Delete or comment out these next 2 lines ---
                 print(f"🖥️ [TEST NOTIFICATION]: Face matched with '{best_match}' on {cam_name}!")
-                # ------------------------------------------------------------------
 
-                # Send the name back to the live video feed!
                 try: result_queue.put_nowait((cam_name, best_match))
                 except Exception: pass
 
                 # Ensure we only log attendance once every 30 seconds
                 now = time.time()
-                if now - recent_logs.get(best_match, 0) > 30: 
+                if now - recent_logs.get(best_match, 0) > WAITING_TIME: 
                     recent_logs[best_match] = now
                     print(f"\n✅ [ATTENDANCE LOG] {best_match} walked past {cam_name} at {timestamp}")
             else:

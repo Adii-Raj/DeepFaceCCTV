@@ -2,7 +2,7 @@
 import multiprocessing as mp
 # ADD THIS IMPORT:
 import ctypes 
-from config import CAMERAS
+from config import CAMERAS,NUM_BRAINS
 from eyes import start_camera_worker
 from brain import start_ai_worker
 
@@ -17,7 +17,6 @@ if __name__ == '__main__':
     # 'i' stands for integer. It starts at 0.
     cache_counter = mp.Value('i', 0) 
     
-    NUM_BRAINS = 3 
     brain_processes = []
     
     print(f"🧠 Booting {NUM_BRAINS} AI Workers...")
