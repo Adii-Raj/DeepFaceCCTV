@@ -9,8 +9,8 @@ from deepface import DeepFace
 
 # ─── CONFIG ───────────────────────────────────────────────────────────────────
 DB_PATH           = "my_database"       
-MODEL_NAME        = "Facenet512"        
-DETECTOR_BACKEND  = "mtcnn"            
+MODEL_NAME        = "VGG-Face"        
+DETECTOR_BACKEND  = "ssd"            
 DISTANCE_THRESH   = 0.30                
 NUM_WORKERS       = 2                   
 AI_EVERY_N_FRAMES = 10                  
@@ -21,7 +21,7 @@ MAX_TRACK_FAILURES= 5
 # Updated to use the HTTP links that you proved work in your test script!
 CAMERAS = {
     "CAM_1_PHONE_A": "http://10.148.100.223:8080/video",
-    "CAM_2_PHONE_B": "http://10.148.100.223:8080/video", # Note: Usually Phone B will have a slightly different IP!
+    "CAM_2_PHONE_B": "http://10.148.100.223:8080/video", 
     "CAM_4_LOCAL"  : 0  
 }
 
@@ -174,8 +174,8 @@ def stream_reader(cam_name, rtsp_url):
             except queue.Full: pass
 
 # ─── TRACKER LOGIC (Multi-Camera) ─────────────────────────────────────────────
-def get_csrt_tracker():
-    try: return cv2.legacy.TrackerCSRT_create()
+def get_tracker():
+    try: return cv2.legacy.TrackerMOSSE_create()
     except AttributeError: return cv2.TrackerCSRT_create()
 
 def update_trackers(cam_name, frame, ai_results):
@@ -186,7 +186,7 @@ def update_trackers(cam_name, frame, ai_results):
             trackers[cam_name] = []
             for face in ai_results:
                 x, y, w, h = face["box"]
-                t = get_csrt_tracker()
+                t = get_tracker()
                 t.init(frame, (x, y, w, h))
                 trackers[cam_name].append({"tracker": t, "name": face["name"], "failures": 0, "box": (x, y, w, h)})
             return ai_results
