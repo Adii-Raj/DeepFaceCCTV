@@ -9,6 +9,9 @@
 #pip install -r requirement.txt
 # pip install deepface opencv-python numpy requests ultralytics ---> Need to install if using latest cctvBrain
 
+#pip install ml-dtypes==0.2.0
+#pip install mediapipe <--- if running above works then leave this one
+
 opencv-contrib-python
 deepface
 numpy
