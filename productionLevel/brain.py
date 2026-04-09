@@ -85,7 +85,7 @@ def start_ai_worker(face_queue, result_queue, cache_counter):
                 img_path=face_crop, 
                 model_name=MODEL_NAME, 
                 detector_backend=DETECTOR_BACKEND, 
-                enforce_detection=False, 
+                enforce_detection=True, 
                 align=True 
             )
                 

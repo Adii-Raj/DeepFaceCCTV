@@ -2,17 +2,19 @@
 
 # Cameras
 CAMERAS = {
-    "CAM_LOCAL": 0 
+    "CAM_LOCAL": 0
 }
 
 # AI Settings
 DB_PATH = "my_database"
-MODEL_NAME = "Facenet512"      
-DETECTOR_BACKEND = "opencv"    
-DISTANCE_THRESH = 0.35
+MODEL_NAME = "VGG-Face"      
+DETECTOR_BACKEND = "opencv"   
+DISTANCE_THRESH = 0.45 
+YOLO_CONF = 0.25
+
 
 # System Settings
-NUM_BRAINS = 3
+NUM_BRAINS = 1
 WAITING_TIME = 5             
 
 # YOLO Camera Settings

@@ -4,7 +4,7 @@ import time
 import queue
 import math
 from ultralytics import YOLO
-from config import YOLO_MODEL, AI_EVERY_N_FRAMES, AI_COOLDOWN_SECONDS, CAMERA_WIDTH, CAMERA_HEIGHT
+from config import YOLO_MODEL, AI_EVERY_N_FRAMES, AI_COOLDOWN_SECONDS, CAMERA_WIDTH, CAMERA_HEIGHT, YOLO_CONF
 
 def start_camera_worker(cam_name, url, face_queue, result_queue, cache_counter):
     print(f"[EYES] 👀 Starting YOLOv8 vision on {cam_name}...")
@@ -45,7 +45,7 @@ def start_camera_worker(cam_name, url, face_queue, result_queue, cache_counter):
             recent_locations = [loc for loc in recent_locations if current_time - loc['time'] < AI_COOLDOWN_SECONDS]
             
             # 2. Run YOLO directly on the 1080p frame
-            results = model.predict(source=frame, classes=[0], verbose=False, conf=0.4)
+            results = model.predict(source=frame, classes=[0], verbose=False, conf=YOLO_CONF)
             
             for box in results[0].boxes:
                 x1, y1, x2, y2 = map(int, box.xyxy[0])
@@ -61,7 +61,7 @@ def start_camera_worker(cam_name, url, face_queue, result_queue, cache_counter):
                         break
                 
                 # 3. Crop Logic & Padding for 1080p
-                head_y2 = int(y1 + (h * 0.5)) # Upper half of the body
+                head_y2 = int(y1 + (h * 0.35)) # Upper half of the body
                 pad = 30 # Increased padding slightly for higher resolution
                 
                 crop_y1, crop_y2 = max(0, y1 - pad), min(h_orig, head_y2 + pad)
@@ -70,22 +70,32 @@ def start_camera_worker(cam_name, url, face_queue, result_queue, cache_counter):
                 person_crop = frame[crop_y1:crop_y2, crop_x1:crop_x2]
                 
                 # Filter out tiny crops that are too blurry anyway
-                if person_crop.size > 0 and person_crop.shape[0] > 50 and person_crop.shape[1] > 50:
+                if person_crop.size > 0 and person_crop.shape[0] > 30 and person_crop.shape[1] > 30:
                     if is_new_person:
                         timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
                         try:
-                            # Send the High-Res crop to the Brain
+                            # ✅ Upscale small/distant face crops before sending to Brain
+                            target_h = 160
+                            if person_crop.shape[0] < target_h:
+                                scale = target_h / person_crop.shape[0]
+                                new_w = int(person_crop.shape[1] * scale)
+                                person_crop = cv2.resize(person_crop, (new_w, target_h),
+                                                        interpolation=cv2.INTER_CUBIC)
+
+                            # Send the upscaled crop to the Brain
                             face_queue.put_nowait((cam_name, person_crop, timestamp))
                             with cache_counter.get_lock():
                                 cache_counter.value += 1
                             recent_locations.append({'center': (cx, cy), 'time': current_time})
-                            
+
                             cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 3)
                             cv2.putText(frame, "To AI...", (x1, y1-10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 255, 0), 3)
                         except queue.Full:
                             pass
                     else:
                         cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 255), 3)
+
+                        
 
         # 4. Draw UI on the 1080p frame (using thicker fonts/lines so it scales well)
         cv2.rectangle(frame, (0, 0), (400, 100), (0,0,0), -1)

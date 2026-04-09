@@ -1,5 +1,8 @@
 
 #Create deepface environment before running it:   -> Use 3.12.7 of python
+# pip install deepface       ---> If you have version 3.12.7 or lower
+# If you have multiple version then figure out how you could use 3.12..
+
 # python3 -m venv deepface_env
 # Then activate that env
 # source deepface_env/bin/activate     -> This for mac
@@ -15,3 +18,6 @@
 opencv-contrib-python
 deepface
 numpy
+tensorflow
+ultralytics
+tf-keras
