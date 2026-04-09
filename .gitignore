@@ -1,5 +1,6 @@
 # --- Python Virtual Environments ---
 deepface_env/
+env312/
 venv/
 env/
 bin/
