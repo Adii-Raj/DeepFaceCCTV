@@ -1,6 +1,7 @@
 # brain.py
 import time
 import os
+import cv2
 import threading
 import numpy as np
 from deepface import DeepFace
