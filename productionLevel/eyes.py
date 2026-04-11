@@ -58,20 +58,9 @@ def start_camera_worker(cam_name, url, face_queue, result_queue, cache_counter):
                         is_new_person = False
                         break
                 
-                frame_area = h_orig * w_orig
-                box_ratio = (w * h) / frame_area
-
-                if box_ratio > 0.15: crop_fraction = 0.20
-                elif box_ratio > 0.06: crop_fraction = 0.28
-                elif box_ratio > 0.02: crop_fraction = 0.35
-                else: crop_fraction = 0.35
-
-                head_y2 = int(y1 + (h * crop_fraction))
-                
-                # ✅ FIXED: Dynamic padding allows tiny distant heads to survive
-                pad = int(w * 0.15) 
-                
-                crop_y1, crop_y2 = max(0, y1 - pad), min(h_orig, head_y2 + pad)
+                # yolov8n-face.pt draws box directly on face, no head guessing needed
+                pad = 20
+                crop_y1, crop_y2 = max(0, y1 - pad), min(h_orig, y2 + pad)
                 crop_x1, crop_x2 = max(0, x1 - pad), min(w_orig, x2 + pad)
                 
                 person_crop = frame[crop_y1:crop_y2, crop_x1:crop_x2]

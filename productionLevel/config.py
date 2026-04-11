@@ -7,8 +7,8 @@ CAMERAS = {
 
 # AI Settings
 DB_PATH = "my_database"
-MODEL_NAME = "VGG-Face"      
-DETECTOR_BACKEND = "opencv"   
+MODEL_NAME = "ArcFace"      
+DETECTOR_BACKEND = "skip"   
 DISTANCE_THRESH = 0.50
 YOLO_CONF = 0.25
 
@@ -18,7 +18,7 @@ NUM_BRAINS = 1
 WAITING_TIME = 3             
 
 # YOLO Camera Settings
-YOLO_MODEL = "yolov8n.pt"    
+YOLO_MODEL = "yolo8n_face.pt" #This is yolo face detecion model which reduce headache of croping face
 AI_EVERY_N_FRAMES = 5        
 AI_COOLDOWN_SECONDS = 1.0    
 
