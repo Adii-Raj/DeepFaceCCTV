@@ -7,9 +7,9 @@ CAMERAS = {
 
 # AI Settings
 DB_PATH = "my_database"
-MODEL_NAME = "ArcFace"      
+MODEL_NAME = "Facenet512"      
 DETECTOR_BACKEND = "skip"   
-DISTANCE_THRESH = 0.50
+DISTANCE_THRESH = 0.40
 YOLO_CONF = 0.25
 
 
@@ -25,3 +25,7 @@ AI_COOLDOWN_SECONDS = 1.0
 # --- NEW: Camera Hardware Settings ---
 CAMERA_WIDTH = 1920
 CAMERA_HEIGHT = 1080
+
+# Low-Light Enhancement (Conservative Mode)
+ENHANCE_LOW_LIGHT = True
+ENHANCE_MIN_BRIGHTNESS = 90  # Skip enhancement above this value (0-255)

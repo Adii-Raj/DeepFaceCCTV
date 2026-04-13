@@ -85,9 +85,9 @@ def start_ai_worker(face_queue, result_queue, cache_counter):
             res = DeepFace.represent(
                 img_path=face_crop, 
                 model_name=MODEL_NAME, 
-                detector_backend="skip", #earlier: DETECTOR_BACKEND
+                detector_backend="opencv", #earlier: DETECTOR_BACKEND:"skip"
                 enforce_detection=False, 
-                align=False 
+                align=True 
             )
                 
             target_emb = np.array(res[0]["embedding"])

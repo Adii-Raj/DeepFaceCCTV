@@ -3,8 +3,44 @@ import cv2
 import time
 import queue
 import math
+import numpy as np
 from ultralytics import YOLO
-from config import YOLO_MODEL, AI_EVERY_N_FRAMES, AI_COOLDOWN_SECONDS, CAMERA_WIDTH, CAMERA_HEIGHT, YOLO_CONF
+from config import YOLO_MODEL, AI_EVERY_N_FRAMES, AI_COOLDOWN_SECONDS, CAMERA_WIDTH, CAMERA_HEIGHT, YOLO_CONF,ENHANCE_LOW_LIGHT
+
+
+def enhance_low_light_crop(img):
+    """Conservative CLAHE + Gamma only for truly dark faces"""
+    if img.size == 0:
+        return img
+        
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    mean_brightness = np.mean(gray)
+    
+    # ✅ SKIP if already well-lit (prevents VGG-Face degradation)
+    if mean_brightness > 90:
+        return img
+        
+    # Convert to LAB
+    lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
+    l, a, b = cv2.split(lab)
+    
+    # ✅ Conservative CLAHE settings
+    clip = 1.5 if mean_brightness < 40 else 1.2
+    clahe = cv2.createCLAHE(clipLimit=clip, tileGridSize=(16, 16))
+    l = clahe.apply(l)
+    
+    lab_enhanced = cv2.merge((l, a, b))
+    img_enhanced = cv2.cvtColor(lab_enhanced, cv2.COLOR_LAB2BGR)
+    
+    # ✅ Mild gamma ONLY for very dark faces
+    if mean_brightness < 50:
+        gamma = 1.5  # Softer than 2.2
+        inv_gamma = 1.0 / gamma
+        table = np.array([((i / 255.0) ** inv_gamma) * 255 for i in range(256)]).astype("uint8")
+        img_enhanced = cv2.LUT(img_enhanced, table)
+        
+    return img_enhanced
+
 
 def start_camera_worker(cam_name, url, face_queue, result_queue, cache_counter):
     print(f"[EYES] 👀 Starting YOLOv8 vision on {cam_name}...")
@@ -63,7 +99,12 @@ def start_camera_worker(cam_name, url, face_queue, result_queue, cache_counter):
                 crop_y1, crop_y2 = max(0, y1 - pad), min(h_orig, y2 + pad)
                 crop_x1, crop_x2 = max(0, x1 - pad), min(w_orig, x2 + pad)
                 
-                person_crop = frame[crop_y1:crop_y2, crop_x1:crop_x2]
+                raw_crop = frame[crop_y1:crop_y2, crop_x1:crop_x2]
+                # ✅ Only enhance if enabled AND image is dark enough
+                if globals().get('ENHANCE_LOW_LIGHT', False) and np.mean(cv2.cvtColor(raw_crop, cv2.COLOR_BGR2GRAY)) < 90:
+                    person_crop = enhance_low_light_crop(raw_crop)
+                else:
+                    person_crop = raw_crop  # Keep original for well-lit faces
                 
                 if person_crop.size > 0 and person_crop.shape[0] > 30 and person_crop.shape[1] > 30:
                     if is_new_person:
