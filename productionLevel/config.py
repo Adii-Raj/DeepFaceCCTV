@@ -2,7 +2,8 @@
 
 # Cameras
 CAMERAS = {
-    "CAM_LOCAL": 0
+    #"CAM_LOCAL": "http://10.165.200.223:8080/video"
+    "Cam_Local":0
 }
 
 # AI Settings
@@ -14,7 +15,7 @@ YOLO_CONF = 0.25
 
 
 # System Settings
-NUM_BRAINS = 1
+NUM_BRAINS = 2
 WAITING_TIME = 3             
 
 # YOLO Camera Settings
@@ -29,3 +30,12 @@ CAMERA_HEIGHT = 1080
 # Low-Light Enhancement (Conservative Mode)
 ENHANCE_LOW_LIGHT = True
 ENHANCE_MIN_BRIGHTNESS = 90  # Skip enhancement above this value (0-255)
+
+# ⏱️ Timing & Throttling Controls
+YOLO_RUN_EVERY_N_FRAMES = 1       # Run YOLO tracker every N frames (1 = every frame, 3 = ~10 FPS, saves CPU)
+TRACK_SEND_COOLDOWN = 1.0         # Max 1 face crop sent to AI per track_id every X seconds (prevents queue spam)
+TRACK_EXPIRY_SECONDS = 3.0        # Remove track from memory if not seen for X seconds (clean up exited people)
+
+# 🗳️ Smart Voting Settings
+VOTE_WINDOW_SECONDS = 5.0     # Only consider votes from the last X seconds
+HIGH_CONF_LOCK_THRESH = 0.75  # Confidence >= this instantly locks the name for the track
