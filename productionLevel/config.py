@@ -4,6 +4,7 @@
 CAMERAS = {
     #"CAM_LOCAL": "http://10.165.200.223:8080/video"
     "Cam_Local":0
+    #"CCTV1":"rtps://user:CCTV%2Auser@10.13.10.104:554/11"
 }
 
 # AI Settings
