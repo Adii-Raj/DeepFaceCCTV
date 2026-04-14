@@ -2,8 +2,8 @@
 
 # Cameras
 CAMERAS = {
-    #"CAM_LOCAL": "http://10.165.200.223:8080/video"
-    "Cam_Local":0
+    "CAM_LOCAL": "http://10.165.200.223:8080/video"
+    #"Cam_Local":0
     #"CCTV1":"rtps://user:CCTV%2Auser@10.13.10.104:554/11"
 }
 
@@ -36,6 +36,8 @@ ENHANCE_MIN_BRIGHTNESS = 90  # Skip enhancement above this value (0-255)
 YOLO_RUN_EVERY_N_FRAMES = 1       # Run YOLO tracker every N frames (1 = every frame, 3 = ~10 FPS, saves CPU)
 TRACK_SEND_COOLDOWN = 1.0         # Max 1 face crop sent to AI per track_id every X seconds (prevents queue spam)
 TRACK_EXPIRY_SECONDS = 3.0        # Remove track from memory if not seen for X seconds (clean up exited people)
+MAX_QUEUE_SIZE       = 1100   # max items in face_queue before dropping
+
 
 # 🗳️ Smart Voting Settings
 VOTE_WINDOW_SECONDS = 5.0     # Only consider votes from the last X seconds
