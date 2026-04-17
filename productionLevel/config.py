@@ -3,13 +3,13 @@
 # Cameras
 CAMERAS = {
     #"CAM_LOCAL": "http://10.165.200.223:8080/video"
-    #"Cam_Local":0
-    "CCTV1":"rtsp://user:CCTV%2Auser@10.13.10.104:554/11"
+    "Cam_Local":0
+    #"CCTV1":"rtsp://user:CCTV%2Auser@10.13.10.104:554/11"
 }
 
 # AI Settings
 DB_PATH = "my_database"
-MODEL_NAME = "Facenet512"      
+MODEL_NAME = "VGG-Face"      
 DETECTOR_BACKEND = "skip"   
 DISTANCE_THRESH = 0.40
 YOLO_CONF = 0.25
@@ -33,7 +33,7 @@ ENHANCE_LOW_LIGHT = True
 ENHANCE_MIN_BRIGHTNESS = 90  # Skip enhancement above this value (0-255)
 
 # ⏱️ Timing & Throttling Controls
-YOLO_RUN_EVERY_N_FRAMES = 1       # Run YOLO tracker every N frames (1 = every frame, 3 = ~10 FPS, saves CPU)
+YOLO_RUN_EVERY_N_FRAMES = 4       # Run YOLO tracker every N frames (1 = every frame, 3 = ~10 FPS, saves CPU)
 TRACK_SEND_COOLDOWN = 1.0         # Max 1 face crop sent to AI per track_id every X seconds (prevents queue spam)
 TRACK_EXPIRY_SECONDS = 3.0        # Remove track from memory if not seen for X seconds (clean up exited people)
 MAX_QUEUE_SIZE       = 1100   # max items in face_queue before dropping

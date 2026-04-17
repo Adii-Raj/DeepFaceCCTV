@@ -33,19 +33,25 @@ class RTSPCaptureThread:
         self._ret = False
         self._stop = threading.Event()
 
-        os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = (
-            "rtsp_transport;tcp|"
-            "buffer_size;10485760"   # 10 MB — handles large HEVC I-frames during motion
-        )
+        os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "rtsp_transport;tcp|fflags;nobuffer|flags;low_delay"
+
         self.cap = self._open()
         self._thread = threading.Thread(target=self._capture_loop, daemon=True)
         self._thread.start()
 
     def _open(self):
-        cap = cv2.VideoCapture(self.url, cv2.CAP_FFMPEG)
+        # Check if the url is an integer (like 0, 1) or a numeric string
+        if isinstance(self.url, int) or str(self.url).isdigit():
+            # For local webcams, use DirectShow (Windows) or the default backend
+            cap = cv2.VideoCapture(int(self.url), cv2.CAP_DSHOW)
+        else:
+            # For RTSP IP cameras, force FFmpeg
+            cap = cv2.VideoCapture(self.url, cv2.CAP_FFMPEG)
+            
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, CAMERA_WIDTH)
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, CAMERA_HEIGHT)
-        cap.set(cv2.CAP_PROP_BUFFERSIZE, 2)   # keep only 2 frames in OpenCV's internal buffer
+        cap.set(cv2.CAP_PROP_BUFFERSIZE, 2)
+        
         return cap
 
     def _capture_loop(self):
@@ -67,6 +73,8 @@ class RTSPCaptureThread:
             with self._lock:
                 self._ret = ret
                 self._frame = frame
+            # Giving gil a tiny break
+            time.sleep(0.005)
 
     def get_frame(self):
         """Returns (ret, frame) — always the freshest available."""
