@@ -147,31 +147,46 @@ def start_camera_worker(cam_name, url, face_queue, result_queue, cache_counter):
                 state = track_states[res_track_id]
                 current_time = time.time()
 
-                if matched_name != "Unknown" and conf >= HIGH_CONF_LOCK_THRESH:
-                    # Rule 1: instant high-confidence lock
-                    state["display"] = matched_name
-                    state["lock_until"] = current_time + 2.0
-                    state["votes"] = []
+                # Always record valid votes (NEVER wipe the history array)
+                if matched_name != "Unknown":
+                    state["votes"].append({"name": matched_name, "conf": conf, "time": current_time})
 
-                elif "lock_until" in state and current_time < state["lock_until"]:
-                    # Rule 2: still within lock window, ignore new votes
-                    pass
+                # Prune old votes based on the time window
+                cutoff = current_time - VOTE_WINDOW_SECONDS
+                state["votes"] = [v for v in state["votes"] if v["time"] > cutoff]
 
-                else:
-                    # Rule 3: recency-weighted scoring
-                    if matched_name != "Unknown":
-                        state["votes"].append({"name": matched_name, "conf": conf, "time": current_time})
-                        cutoff = current_time - VOTE_WINDOW_SECONDS
-                        state["votes"] = [v for v in state["votes"] if v["time"] > cutoff]
+                # Calculate weighted scores and count total votes per person
+                scores = {}
+                vote_counts = {}
+                for v in state["votes"]:
+                    time_weight = max(0.2, 1.0 - (current_time - v["time"]) / VOTE_WINDOW_SECONDS)
+                    scores[v["name"]] = scores.get(v["name"], 0.0) + (v["conf"] * time_weight)
+                    vote_counts[v["name"]] = vote_counts.get(v["name"], 0) + 1
 
-                        scores = {}
-                        for v in state["votes"]:
-                            time_weight = max(0.2, 1.0 - (current_time - v["time"]) / VOTE_WINDOW_SECONDS)
-                            scores[v["name"]] = scores.get(v["name"], 0.0) + (v["conf"] * time_weight)
+                current_display = state.get("display", "Unknown")
 
-                        state["display"] = max(scores, key=scores.get) if scores else "Unknown"
+                if scores:
+                    # HYSTERESIS LOGIC: Give the currently displayed name a 50% score boost.
+                    # This means a flicker/false-positive has to violently outscore the incumbent to take over.
+                    if current_display in scores:
+                        scores[current_display] *= 1.5
+
+                    best_name = max(scores, key=scores.get)
+                    
+                    # Revert multiplier to check absolute raw score against thresholds
+                    raw_best_score = scores[best_name] / 1.5 if best_name == current_display else scores[best_name]
+
+                    if best_name == current_display:
+                        # Drop to Unknown if the track score decays too much (e.g., person turns away)
+                        if raw_best_score < 0.3:
+                            state["display"] = "Unknown"
                     else:
-                        state["display"] = "Unknown"
+                        # CHALLENGER LOGIC (Unknown -> A, or A -> B)
+                        # Require at least 2 votes OR one extremely high-confidence frame to switch displays
+                        if vote_counts[best_name] >= 2 or raw_best_score >= HIGH_CONF_LOCK_THRESH:
+                            state["display"] = best_name
+                else:
+                    state["display"] = "Unknown"
 
             except queue.Empty:
                 break
