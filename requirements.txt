@@ -1,0 +1,28 @@
+# Survil — requirements.txt
+# Install from project root:
+#   pip install -r requirements.txt
+
+# ── Computer vision ───────────────────────────────
+opencv-python>=4.8.0
+numpy>=1.24.0
+
+# ── Face recognition ──────────────────────────────
+insightface>=0.7.3
+onnxruntime>=1.16.0          # CPU inference
+# onnxruntime-gpu>=1.16.0    # Uncomment for NVIDIA GPU (replaces onnxruntime)
+
+# ── Vector database ───────────────────────────────
+chromadb>=0.4.0
+
+# ── Web dashboard ─────────────────────────────────
+flask>=3.0.0
+
+# ── System tray (optional, launcher background mode)
+# pystray>=0.19.0
+# Pillow>=10.0.0
+
+# ── Process management ────────────────────────────
+psutil>=5.9.0
+
+# ── Utilities ─────────────────────────────────────
+requests>=2.31.0

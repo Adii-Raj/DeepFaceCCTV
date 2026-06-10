@@ -1,18 +1,26 @@
-# --- Python Virtual Environments ---
-deepface_env/
-env312/
-venv/
-env/
-bin/
-lib/
-
-# --- DeepFace & AI related ---
-# Ignore the actual saved database images if you don't want them public
-my_database/
-# Ignore weights downloaded by DeepFace (ArcFace, etc.)
-.deepface/
-
-# --- OS specific files ---
-.DS_Store
+# Python
 __pycache__/
 *.py[cod]
+*.pyo
+venv/
+.venv/
+*.egg-info/
+
+# Runtime data — never commit these
+data/
+dashboard/static/crops/
+pipeline.log
+flask.log
+dashboard.log
+pipeline.pid
+dashboard.pid
+
+# Models — too large for git, download separately
+models/
+
+# Config with credentials — use config.example.json instead
+config.json
+
+# OS
+.DS_Store
+Thumbs.db

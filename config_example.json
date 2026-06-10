@@ -1,0 +1,17 @@
+{
+    //Chagne this config_example.json to config.json - If you want to use this config
+  "rtsp_url": "rtsp://user:password@192.168.1.10:554/stream1",
+  "db_path": "data/face_db",
+  "collection_name": "face_gallery",
+  "model_dir": "models/buffalo_l",
+  "detector_model": "models/face_detection_yunet_2023mar.onnx",
+  "detections_csv": "data/detections.csv",
+  "crops_dir": "dashboard/static/crops",
+  "headless": true,
+  "gallery_refresh_sec": 60,
+  "score_threshold": 0.25,
+  "nms_threshold": 0.3,
+  "confidence_threshold": 0.7,
+  "flask_port": 5000,
+  "auto_start": true
+}
