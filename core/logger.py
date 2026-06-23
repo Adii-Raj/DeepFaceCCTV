@@ -1,36 +1,37 @@
 """
 core/logger.py
 ──────────────
-Detection logging — CSV only
+Detection logging — SQLite only
 
-Single responsibility: persist detection events to disk.
+Single responsibility: persist detection events to SQLite database.
 
-one outputs:
-  1. detections.csv  — one row per confirmed detection (with cooldown)
+one output:
+  1. detections.db  — one row per confirmed detection (with cooldown)
 
 No detection, no recognition, no drawing here.
 If you want to change log format or add a database log — only this file changes.
 """
 
-import csv
 import os
 import time
+import sqlite3
 from datetime import datetime
 from pathlib import Path
+from typing import Optional
 
 import numpy as np
 
-
 # ── DetectionLogger ───────────────────────────────────────────────────────────
+
 
 class DetectionLogger:
     """
-    Logs confirmed face detections to CSV only
+    Logs confirmed face detections to SQLite only
 
     Cooldown prevents the same person being logged repeatedly every frame —
     by default a person is only logged once every 3 seconds.
 
-    CSV columns:
+    SQLite columns:
         timestamp     : wall-clock time (YYYY-MM-DD HH:MM:SS)
         video_time_s  : position in video stream (seconds)
         name          : identity label
@@ -38,57 +39,70 @@ class DetectionLogger:
         status        : 'known' | 'unsure'
 
     Usage:
-        logger = DetectionLogger(csv_path="data/detections.csv")
+        logger = DetectionLogger(db_path="data/detections.db")
         logger.log(name, score, video_time, status)
         logger.close()
     """
 
-    CSV_COLUMNS = [
-        "timestamp",
-        "video_time_s",
-        "name",
-        "confidence",
-        "status",
-    ]
-
     def __init__(
         self,
-        csv_path:   str = "data/detections.csv",
-        cooldown:   float = 3.0,
+        db_path: str = "data/detections.db",
+        cooldown: float = 3.0,
     ):
         """
         Args:
-            csv_path   : path to output CSV file
+            db_path    : path to SQLite database file
             cooldown   : minimum seconds between log entries for the same person
         """
-        self._csv_path   = csv_path
-        self._cooldown   = cooldown
+        self._db_path = db_path
+        self._cooldown = cooldown
 
         # Per-person last-logged timestamp
         self._last_seen: dict[str, float] = {}
 
         # Ensure directories exist
-        Path(csv_path).parent.mkdir(parents=True, exist_ok=True)
+        Path(db_path).parent.mkdir(parents=True, exist_ok=True)
 
+        # Initialize database
+        self._conn = sqlite3.connect(db_path, check_same_thread=False)
+        self._cursor = self._conn.cursor()
+        self._init_table()
 
-        # Open CSV — append mode so logs survive restarts
-        file_exists = os.path.isfile(csv_path)
-        self._file = open(csv_path, "a", newline="", encoding="utf-8")
-        self._writer = csv.writer(self._file)
-        if not file_exists:
-            self._writer.writerow(self.CSV_COLUMNS)
-            self._file.flush()
+        print(f"[logger] SQLite -> {db_path}")
 
-        print(f"[logger] CSV -> {csv_path}")
+    # ── Database setup ────────────────────────────────────────────────────────
+
+    def _init_table(self):
+        """Create detections table if it doesn't exist."""
+        self._cursor.execute("""
+            CREATE TABLE IF NOT EXISTS detections (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp TEXT NOT NULL,
+                video_time_s REAL,
+                name TEXT,
+                confidence REAL,
+                status TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        # Indexes for fast queries
+        self._cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_timestamp ON detections(timestamp)"
+        )
+        self._cursor.execute("CREATE INDEX IF NOT EXISTS idx_name ON detections(name)")
+        self._cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_created ON detections(created_at)"
+        )
+        self._conn.commit()
 
     # ── Logging ───────────────────────────────────────────────────────────────
 
     def log(
         self,
-        name:        str,
-        score:       float,
-        video_time:  float,
-        status:      str,
+        name: str,
+        score: float,
+        video_time: float,
+        status: str,
     ) -> bool:
         """
         Log a detection event if cooldown has passed.
@@ -114,26 +128,30 @@ class DetectionLogger:
 
         self._last_seen[name] = now
 
-    
-        # Write CSV row
-        self._writer.writerow([
-            datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            f"{video_time:.2f}",
-            name,
-            f"{score:.4f}",
-            status,
-        ])
-        self._file.flush()
+        # Write to SQLite
+        self._cursor.execute(
+            """
+            INSERT INTO detections (timestamp, video_time_s, name, confidence, status)
+            VALUES (?, ?, ?, ?, ?)
+        """,
+            (
+                datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                round(video_time, 2),
+                name,
+                round(score, 4),
+                status,
+            ),
+        )
+        self._conn.commit()
         return True
-    
+
     # ── Lifecycle ─────────────────────────────────────────────────────────────
 
     def close(self):
-        """Flush and close the CSV file."""
+        """Close the SQLite connection."""
         try:
-            self._file.flush()
-            self._file.close()
-            print(f"[logger] Closed — {self._csv_path}")
+            self._conn.close()
+            print(f"[logger] Closed — {self._db_path}")
         except Exception:
             pass
 
@@ -141,13 +159,53 @@ class DetectionLogger:
 
     def recent_detections(self, n: int = 20) -> list[dict]:
         """
-        Read the last N rows from the CSV and return as list of dicts.
-        Used by the Flask dashboard for live preview without a DB query.
+        Read the last N rows from the database and return as list of dicts.
+        Used by the Flask dashboard for live preview.
         Returns newest first.
         """
         try:
-            with open(self._csv_path, "r", encoding="utf-8") as f:
-                rows = list(csv.DictReader(f))
-            return list(reversed(rows[-n:]))
+            self._cursor.execute(
+                """
+                SELECT timestamp, video_time_s, name, confidence, status
+                FROM detections
+                ORDER BY created_at DESC
+                LIMIT ?
+            """,
+                (n,),
+            )
+            rows = self._cursor.fetchall()
+
+            columns = ["timestamp", "video_time_s", "name", "confidence", "status"]
+            return [dict(zip(columns, row)) for row in rows]
+        except Exception:
+            return []
+
+    def get_all_detections(self) -> list[dict]:
+        """Return all detections as list of dicts."""
+        try:
+            self._cursor.execute("""
+                SELECT timestamp, video_time_s, name, confidence, status
+                FROM detections
+                ORDER BY created_at DESC
+            """)
+            rows = self._cursor.fetchall()
+            columns = ["timestamp", "video_time_s", "name", "confidence", "status"]
+            return [dict(zip(columns, row)) for row in rows]
+        except Exception:
+            return []
+
+    def get_detection_count(self) -> int:
+        """Return total number of detection entries."""
+        try:
+            self._cursor.execute("SELECT COUNT(*) FROM detections")
+            return self._cursor.fetchone()[0]
+        except Exception:
+            return 0
+
+    def get_unique_names(self) -> list[str]:
+        """Return list of unique detected names."""
+        try:
+            self._cursor.execute("SELECT DISTINCT name FROM detections ORDER BY name")
+            return [row[0] for row in self._cursor.fetchall()]
         except Exception:
             return []

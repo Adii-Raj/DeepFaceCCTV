@@ -50,7 +50,7 @@ DEFAULTS = {
     "db_path":            "data/face_db",
     "collection_name":    "face_gallery",
     "refresh_interval":   60,
-    "output_csv":         "data/detections.csv",
+    "output_db":         "data/detections.db",
     "yunet_model":        "models/face_detection_yunet_2023mar.onnx",
     "sface_model":        "models/face_recognition_sface_2021dec.onnx",
     "threshold_accept":   0.48,
@@ -115,7 +115,7 @@ def parse_args(args=None) -> argparse.Namespace:
                    help="Gallery cache refresh interval (seconds)")
 
     # Output
-    p.add_argument("--output-csv",  help="Path to detections CSV")
+    p.add_argument("--output-db",  help="Path to detections db")
 
     # Models
     p.add_argument("--yunet-model", help="Path to YuNet ONNX model")
@@ -148,7 +148,7 @@ def _merge_args_into_config(args: argparse.Namespace, cfg: dict) -> dict:
         "db_path":              args.db_path,
         "collection_name":      args.collection_name,
         "refresh_interval":     args.refresh_interval,
-        "output_csv":           args.output_csv,
+        "output_db":            args.output_db,
         "yunet_model":          args.yunet_model,
         "sface_model":          args.sface_model,
         "threshold_accept":     args.threshold_accept,
@@ -345,7 +345,7 @@ def _submit_embed(
         track.display_name = d_name
         track.display_status = d_status
 
-        # Log to CSV — NO crop image passed, NO crop saved
+        # Log to db — NO crop image passed, NO crop saved
         logger.log(d_name, score, getattr(track, "_last_vt", 0.0), d_status)
 
     except Exception as e:
@@ -489,7 +489,7 @@ def run(cfg: dict):
     gallery.start()
 
     logger = DetectionLogger(
-        csv_path   = cfg["output_csv"],
+        db_path   = cfg["output_db"],
         cooldown   = cfg.get("log_cooldown", 3.0),
     )
 

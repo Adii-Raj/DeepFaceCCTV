@@ -12,7 +12,7 @@ Survil/
 ├── builder/        Dataset builder (Tkinter UI + ChromaDB ops + embedding extraction)
 ├── dashboard/      Flask web dashboard (app.py + index.html)
 ├── launcher/       Tkinter setup launcher (launcher.py + service.py)
-├── data/           Runtime data — detections.csv, ChromaDB (auto-created)
+├── data/           Runtime data — detections.db, ChromaDB (auto-created)
 ├── models/         YuNet + buffalo_l ONNX model files (download separately)
 ├── config.json     Single config file for all settings
 └── requirements.txt
@@ -190,7 +190,7 @@ journalctl -u survil -f    # live logs
 | `collection_name` | `face_gallery` | ChromaDB collection name |
 | `model_dir` | `models/buffalo_l` | InsightFace model directory |
 | `detector_model` | `models/face_detection_yunet_2023mar.onnx` | YuNet model path |
-| `detections_csv` | `data/detections.csv` | Detection log output path |
+| `detections_db` | `data/detections.db` | Detection log output path |
 | `headless` | `true` | Skip cv2.imshow (required on servers) |
 | `gallery_refresh_sec` | `60` | How often pipeline reloads gallery from ChromaDB |
 | `score_threshold` | `0.25` | Minimum cosine similarity to call a match "known" |

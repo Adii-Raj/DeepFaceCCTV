@@ -35,7 +35,7 @@ DEFAULT_CONFIG: dict = {
     "collection_name": "face_gallery",
     "model_dir": "models/buffalo_l",
     "detector_model": "models/face_detection_yunet_2023mar.onnx",
-    "detections_csv": "data/detections.csv",
+    "detections_db": "data/detections.db",
     "crops_dir": "dashboard/static/crops",
     "headless": True,
     "gallery_refresh_sec": 60,
@@ -210,7 +210,7 @@ class PipelineService:
             "--db-path", cfg["db_path"],
             "--collection-name", cfg["collection_name"],
             "--yunet-model", cfg["detector_model"],
-            "--output-csv", cfg["detections_csv"],
+            "--output-db", cfg["detections_db"],
             "--threshold-accept", str(cfg["score_threshold"]),
             "--refresh-interval", str(cfg["gallery_refresh_sec"]),
         ]
@@ -218,7 +218,7 @@ class PipelineService:
             cmd.append("--headless")
 
         # Ensure directories exist
-        Path(cfg["detections_csv"]).parent.mkdir(parents=True, exist_ok=True)
+        Path(cfg["detections_db"]).parent.mkdir(parents=True, exist_ok=True)
         Path(cfg["crops_dir"]).mkdir(parents=True, exist_ok=True)
 
         try:

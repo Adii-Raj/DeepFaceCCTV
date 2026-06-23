@@ -527,7 +527,7 @@
           // Status dot
           const dot = document.getElementById("status-dot");
           const stxt = document.getElementById("status-text");
-          if (data.csv_exists) {
+          if (data.db_exists) {
             dot.classList.add("live");
             stxt.textContent = "Pipeline running";
           } else {

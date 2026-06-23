@@ -3,7 +3,7 @@ dashboard/app.py
 ----------------
 Flask dashboard server for Survil.
 Single responsibility: routes only.
-Reads data/detections.csv and serves dashboard/static/crops/.
+Reads data/detections.db and serves dashboard/static/crops/.
 No detection logic, no ChromaDB writes, no Tkinter.
 
 Run from project root:
@@ -15,7 +15,7 @@ Accessible on LAN: http://<machine-ip>:5002
 
 from __future__ import annotations
 
-import csv
+import sqlite3
 import json
 import os
 import sys
@@ -50,7 +50,7 @@ app.config["TEMPLATES_AUTO_RELOAD"] = True
 app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 0
 
 _CONFIG_PATH = _PROJECT_ROOT / "config.json"
-_DEFAULT_CSV = _PROJECT_ROOT / "data" / "detections.csv"
+_DEFAULT_DB = _PROJECT_ROOT / "data" / "detections.db"
 
 
 # ---------------------------------------------------------------------------
@@ -66,45 +66,61 @@ def _load_config() -> dict:
         return {}
 
 
-def _csv_path() -> Path:
+# ---------------------------------------------------------------------------
+# DB reader
+# ---------------------------------------------------------------------------
+import sqlite3
+from pathlib import Path
+
+# ── Database path ────────────────────────────────────────────────────────────
+
+def _db_path() -> Path:
+    """Return the path to the detections SQLite database."""
     cfg = _load_config()
-    return Path(cfg.get("detections_csv", str(_DEFAULT_CSV)))
+    return Path(cfg.get("detections_db", str(_DEFAULT_DB)))
 
 
-# ---------------------------------------------------------------------------
-# CSV reader
-# ---------------------------------------------------------------------------
+# ── Read detections ───────────────────────────────────────────────────────────
 
 
 def _read_detections(limit: int = 200) -> list[dict]:
     """
-    Read the last `limit` rows from detections.csv.
+    Read the last `limit` rows from detections.db (SQLite).
     Returns list of dicts, newest first.
-
-    Expected CSV columns (written by core/logger.py):
-        timestamp, name, score, status
     """
-    path = _csv_path()
-    if not path.exists():
+    db_file = _db_path()
+    if not db_file.exists():
         return []
 
     rows = []
     try:
-        with open(path, "r", encoding="utf-8", newline="") as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                rows.append(row)
-    except Exception:
+        conn = sqlite3.connect(db_file, check_same_thread=False)
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT timestamp, video_time_s, name, confidence, status
+            FROM detections
+            ORDER BY created_at DESC
+            LIMIT ?
+            """,
+            (limit,),
+        )
+
+        columns = ["timestamp", "video_time_s", "name", "confidence", "status"]
+        for row in cursor.fetchall():
+            row_dict = dict(zip(columns, row))
+            row_dict["crop_url"] = ""  # Empty for compatibility
+            rows.append(row_dict)
+
+        conn.close()
+    except Exception as e:
+        print(f"[dashboard] Error reading detections DB: {e}")
         return []
 
-    # Newest first, capped at limit
-    rows = rows[-limit:][::-1]
-
-    #crop url is empty
-    for row in rows:
-        row["crop_url"] = ""
-
     return rows
+
+
+# ── Summary stats ───────────────────────────────────────────────────────────
 
 
 def _summary_stats(rows: list[dict]) -> dict:
@@ -116,7 +132,7 @@ def _summary_stats(rows: list[dict]) -> dict:
     people: dict[str, int] = {}
     for r in rows:
         name = r.get("name", "unknown")
-        if name and name.lower() not in ("unknown", ""):
+        if name and name.lower() not in ("unknown", "", "?"):
             people[name] = people.get(name, 0) + 1
 
     top_people = sorted(people.items(), key=lambda x: x[1], reverse=True)[:5]
@@ -159,7 +175,7 @@ def api_detections():
             "detections": rows,
             "stats": stats,
             "pipeline_log_exists": Path("pipeline.log").exists(),
-            "csv_exists": _csv_path().exists(),
+            "db_exists": _db_path().exists(),
             "server_time": datetime.now(timezone.utc).isoformat(),
         }
     )
@@ -236,4 +252,4 @@ if __name__ == "__main__":
     print(f"LAN access       -> http://<your-ip>:{port}")
     print("Press Ctrl+C to stop.")
 
-    app.run(host="0.0.0.0", port=port, debug=False)
+    app.run(host="0.0.0.0", port=port, debug=True)
