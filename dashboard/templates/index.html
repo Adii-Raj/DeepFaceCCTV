@@ -1,495 +1,644 @@
-<!DOCTYPE html>
+#cache-control
+
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+
+<!doctype html>
 <html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Survil — Dashboard</title>
-<style>
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-  :root {
-    --bg:        #0d0d1a;
-    --bg2:       #13132a;
-    --bg3:       #1a1a35;
-    --card:      #1e1e3a;
-    --border:    #2a2a4a;
-    --accent:    #e94560;
-    --accent2:   #0f3460;
-    --green:     #2ecc71;
-    --yellow:    #f39c12;
-    --red:       #e74c3c;
-    --text:      #ecf0f1;
-    --muted:     #8892a4;
-    --mono:      "Courier New", monospace;
-  }
-
-  body {
-    background: var(--bg);
-    color: var(--text);
-    font-family: "Segoe UI", system-ui, sans-serif;
-    font-size: 14px;
-    min-height: 100vh;
-  }
-
-  /* ── Header ─────────────────────────────────── */
-  header {
-    background: var(--accent2);
-    padding: 0 24px;
-    height: 56px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    border-bottom: 2px solid var(--accent);
-  }
-  .logo { font-size: 22px; font-weight: 700; color: var(--accent); letter-spacing: 3px; }
-  .header-right { display: flex; align-items: center; gap: 16px; color: var(--muted); font-size: 12px; }
-  .status-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--red); display: inline-block; }
-  .status-dot.live { background: var(--green); animation: pulse 2s infinite; }
-  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
-
-  /* ── Layout ──────────────────────────────────── */
-  main { max-width: 1400px; margin: 0 auto; padding: 20px 24px; }
-
-  /* ── Stat cards ──────────────────────────────── */
-  .stats-row {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-    gap: 16px;
-    margin-bottom: 24px;
-  }
-  .stat-card {
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 16px 20px;
-  }
-  .stat-card .label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
-  .stat-card .value { font-size: 32px; font-weight: 700; }
-  .stat-card.total  .value { color: var(--text); }
-  .stat-card.known  .value { color: var(--green); }
-  .stat-card.unknown .value { color: var(--yellow); }
-  .stat-card.people  .value { color: #74b9ff; }
-
-  /* ── Two-column layout ───────────────────────── */
-  .grid2 { display: grid; grid-template-columns: 1fr 340px; gap: 20px; }
-  @media (max-width: 900px) { .grid2 { grid-template-columns: 1fr; } }
-
-  /* ── Panel ───────────────────────────────────── */
-  .panel {
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    overflow: hidden;
-  }
-  .panel-header {
-    padding: 12px 16px;
-    border-bottom: 1px solid var(--border);
-    font-size: 12px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    color: var(--muted);
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-  }
-  .panel-body { padding: 0; }
-
-  /* ── Detections table ────────────────────────── */
-  .det-table { width: 100%; border-collapse: collapse; }
-  .det-table th {
-    background: var(--bg3);
-    padding: 8px 12px;
-    text-align: left;
-    font-size: 11px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    color: var(--muted);
-    border-bottom: 1px solid var(--border);
-    position: sticky;
-    top: 0;
-  }
-  .det-table td {
-    padding: 8px 12px;
-    border-bottom: 1px solid var(--border);
-    vertical-align: middle;
-  }
-  .det-table tr:last-child td { border-bottom: none; }
-  .det-table tr:hover td { background: var(--bg3); }
-
-  .table-wrap { max-height: 520px; overflow-y: auto; }
-
-  .crop-thumb {
-    width: 44px; height: 44px;
-    object-fit: cover;
-    border-radius: 6px;
-    border: 1px solid var(--border);
-    background: var(--bg3);
-  }
-  .no-crop {
-    width: 44px; height: 44px;
-    border-radius: 6px;
-    background: var(--bg3);
-    border: 1px solid var(--border);
-    display: flex; align-items: center; justify-content: center;
-    color: var(--muted); font-size: 18px;
-  }
-
-  .badge {
-    display: inline-block;
-    padding: 2px 8px;
-    border-radius: 20px;
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 0.5px;
-  }
-  .badge.known   { background: rgba(46,204,113,0.15); color: var(--green); border: 1px solid rgba(46,204,113,0.3); }
-  .badge.unknown { background: rgba(243,156,18,0.15); color: var(--yellow); border: 1px solid rgba(243,156,18,0.3); }
-
-  .score { font-family: var(--mono); font-size: 12px; color: var(--muted); }
-  .name  { font-weight: 600; }
-  .ts    { font-size: 11px; color: var(--muted); white-space: nowrap; }
-
-  /* ── Right sidebar ───────────────────────────── */
-  .sidebar { display: flex; flex-direction: column; gap: 20px; }
-
-  /* Top people list */
-  .people-list { list-style: none; }
-  .people-list li {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 9px 16px;
-    border-bottom: 1px solid var(--border);
-    font-size: 13px;
-  }
-  .people-list li:last-child { border-bottom: none; }
-  .people-list .count {
-    background: var(--accent2);
-    color: #74b9ff;
-    border-radius: 10px;
-    padding: 1px 8px;
-    font-size: 11px;
-    font-weight: 600;
-  }
-
-  /* Log panel */
-  .log-box {
-    font-family: var(--mono);
-    font-size: 11px;
-    color: #a8ff78;
-    background: #0d0d0d;
-    padding: 12px 14px;
-    max-height: 220px;
-    overflow-y: auto;
-    white-space: pre-wrap;
-    word-break: break-all;
-    line-height: 1.5;
-  }
-
-  /* ── Gallery panel ───────────────────────────── */
-  .gallery-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
-    gap: 12px;
-    padding: 16px;
-  }
-  .gallery-person {
-    text-align: center;
-    background: var(--bg3);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 10px 6px;
-  }
-  .gallery-person .avatar {
-    width: 52px; height: 52px;
-    border-radius: 50%;
-    background: var(--accent2);
-    margin: 0 auto 6px;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 22px; color: #74b9ff; font-weight: 700;
-  }
-  .gallery-person .gname { font-size: 11px; font-weight: 600; word-break: break-word; }
-  .gallery-person .gemb  { font-size: 10px; color: var(--muted); margin-top: 2px; }
-
-  /* ── Tabs ────────────────────────────────────── */
-  .tabs { display: flex; border-bottom: 1px solid var(--border); padding: 0 16px; }
-  .tab {
-    padding: 10px 16px;
-    cursor: pointer;
-    font-size: 12px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    color: var(--muted);
-    border-bottom: 2px solid transparent;
-    margin-bottom: -1px;
-    user-select: none;
-  }
-  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
-
-  .tab-panel { display: none; }
-  .tab-panel.active { display: block; }
-
-  /* ── Misc ────────────────────────────────────── */
-  .empty-state { padding: 32px; text-align: center; color: var(--muted); }
-  #last-update { font-size: 11px; color: var(--muted); }
-  .refresh-badge {
-    font-size: 10px;
-    background: var(--bg3);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    padding: 2px 6px;
-    color: var(--muted);
-  }
-</style>
-</head>
-<body>
-
-<header>
-  <span class="logo">SURVIL</span>
-  <div class="header-right">
-    <span id="pipeline-status">
-      <span class="status-dot" id="status-dot"></span>
-      <span id="status-text">Connecting…</span>
-    </span>
-    <span id="last-update">—</span>
-    <span class="refresh-badge">auto-refresh 5s</span>
-  </div>
-</header>
-
-<main>
-
-  <!-- Stat cards -->
-  <div class="stats-row">
-    <div class="stat-card total">
-      <div class="label">Total detections</div>
-      <div class="value" id="stat-total">—</div>
-    </div>
-    <div class="stat-card known">
-      <div class="label">Known</div>
-      <div class="value" id="stat-known">—</div>
-    </div>
-    <div class="stat-card unknown">
-      <div class="label">Unknown</div>
-      <div class="value" id="stat-unknown">—</div>
-    </div>
-    <div class="stat-card people">
-      <div class="label">Unique people</div>
-      <div class="value" id="stat-people">—</div>
-    </div>
-  </div>
-
-  <!-- Main grid -->
-  <div class="grid2">
-
-    <!-- Left: detections + gallery tabs -->
-    <div class="panel">
-      <div class="tabs">
-        <div class="tab active" onclick="switchTab('detections', this)">Detections</div>
-        <div class="tab" onclick="switchTab('gallery', this)">Gallery</div>
-      </div>
-
-      <!-- Detections tab -->
-      <div class="tab-panel active" id="tab-detections">
-        <div class="table-wrap">
-          <table class="det-table">
-            <thead>
-              <tr>
-                <th>Crop</th>
-                <th>Name</th>
-                <th>Status</th>
-                <th>Score</th>
-                <th>Time</th>
-              </tr>
-            </thead>
-            <tbody id="det-tbody">
-              <tr><td colspan="5" class="empty-state">Loading…</td></tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <!-- Gallery tab -->
-      <div class="tab-panel" id="tab-gallery">
-        <div class="gallery-grid" id="gallery-grid">
-          <div class="empty-state" style="grid-column:1/-1">Loading gallery…</div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Right sidebar -->
-    <div class="sidebar">
-
-      <!-- Top people -->
-      <div class="panel">
-        <div class="panel-header">Top detections (today)</div>
-        <div class="panel-body">
-          <ul class="people-list" id="top-people">
-            <li style="color:var(--muted);justify-content:center">Loading…</li>
-          </ul>
-        </div>
-      </div>
-
-      <!-- Pipeline log -->
-      <div class="panel">
-        <div class="panel-header">
-          Pipeline log
-          <span id="log-lines" style="font-size:10px;color:var(--muted)"></span>
-        </div>
-        <div class="panel-body">
-          <div class="log-box" id="log-box">(waiting for log…)</div>
-        </div>
-      </div>
-
-    </div>
-  </div>
-
-</main>
-
-<script>
-  let lastDetCount = 0;
-
-  // ── Tab switching ──────────────────────────────
-  function switchTab(name, el) {
-    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
-    el.classList.add('active');
-    document.getElementById('tab-' + name).classList.add('active');
-    if (name === 'gallery') fetchGallery();
-  }
-
-  // ── Helpers ────────────────────────────────────
-  function fmtTime(ts) {
-    if (!ts) return '—';
-    try {
-      const d = new Date(ts);
-      return d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', second:'2-digit'});
-    } catch { return ts; }
-  }
-
-  function fmtScore(s) {
-    const n = parseFloat(s);
-    return isNaN(n) ? '—' : n.toFixed(3);
-  }
-
-  function escHtml(s) {
-    return String(s)
-      .replace(/&/g,'&amp;').replace(/</g,'&lt;')
-      .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-  }
-
-  // ── Fetch detections ───────────────────────────
-  async function fetchDetections() {
-    try {
-      const res = await fetch('/api/detections');
-      const data = await res.json();
-
-      // Status dot
-      const dot = document.getElementById('status-dot');
-      const stxt = document.getElementById('status-text');
-      if (data.csv_exists) {
-        dot.classList.add('live');
-        stxt.textContent = 'Pipeline running';
-      } else {
-        dot.classList.remove('live');
-        stxt.textContent = 'No detections yet';
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Survil-Dashboard</title>
+    <style>
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
       }
 
-      // Last update
-      document.getElementById('last-update').textContent =
-        'Updated ' + new Date().toLocaleTimeString();
-
-      // Stat cards
-      const s = data.stats;
-      document.getElementById('stat-total').textContent   = s.total;
-      document.getElementById('stat-known').textContent   = s.known;
-      document.getElementById('stat-unknown').textContent = s.unknown;
-      document.getElementById('stat-people').textContent  = s.top_people.length;
-
-      // Top people sidebar
-      const tpEl = document.getElementById('top-people');
-      if (s.top_people.length === 0) {
-        tpEl.innerHTML = '<li style="color:var(--muted);justify-content:center">No data yet</li>';
-      } else {
-        tpEl.innerHTML = s.top_people.map(p =>
-          `<li><span>${escHtml(p.name)}</span><span class="count">${p.count}</span></li>`
-        ).join('');
+      :root {
+        --bg: #0d0d1a;
+        --bg2: #13132a;
+        --bg3: #1a1a35;
+        --card: #1e1e3a;
+        --border: #2a2a4a;
+        --accent: #e94560;
+        --accent2: #0f3460;
+        --green: #2ecc71;
+        --yellow: #f39c12;
+        --red: #e74c3c;
+        --text: #ecf0f1;
+        --muted: #8892a4;
+        --mono: "Courier New", monospace;
       }
 
-      // Detections table
-      const tbody = document.getElementById('det-tbody');
-      if (data.detections.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No detections yet. Is the pipeline running?</td></tr>';
-      } else {
-        tbody.innerHTML = data.detections.map(d => {
-          const isKnown = (d.status || '').toLowerCase() === 'known';
-          const cropHtml = d.crop_url
-            ? `<img src="${escHtml(d.crop_url)}" class="crop-thumb" onerror="this.style.display='none'">`
-            : `<div class="no-crop">?</div>`;
-          return `
-            <tr>
-              <td>${cropHtml}</td>
-              <td><span class="name">${escHtml(d.name || 'Unknown')}</span></td>
-              <td><span class="badge ${isKnown ? 'known' : 'unknown'}">${escHtml(d.status || 'unknown')}</span></td>
-              <td><span class="score">${fmtScore(d.score)}</span></td>
+      body {
+        background: var(--bg);
+        color: var(--text);
+        font-family: "Segoe UI", system-ui, sans-serif;
+        font-size: 14px;
+        min-height: 100vh;
+      }
+
+      /* ── Header ─────────────────────────────────── */
+      header {
+        background: var(--accent2);
+        padding: 0 24px;
+        height: 56px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        border-bottom: 2px solid var(--accent);
+      }
+      .logo {
+        font-size: 22px;
+        font-weight: 700;
+        color: var(--accent);
+        letter-spacing: 3px;
+      }
+      .header-right {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .status-dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: var(--red);
+        display: inline-block;
+      }
+      .status-dot.live {
+        background: var(--green);
+        animation: pulse 2s infinite;
+      }
+      @keyframes pulse {
+        0%,
+        100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.5;
+        }
+      }
+
+      /* ── Layout ──────────────────────────────────── */
+      main {
+        max-width: 1400px;
+        margin: 0 auto;
+        padding: 20px 24px;
+      }
+
+      /* ── Stat cards ──────────────────────────────── */
+      .stats-row {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+        gap: 16px;
+        margin-bottom: 24px;
+      }
+      .stat-card {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 16px 20px;
+      }
+      .stat-card .label {
+        color: var(--muted);
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        margin-bottom: 6px;
+      }
+      .stat-card .value {
+        font-size: 32px;
+        font-weight: 700;
+      }
+      .stat-card.total .value {
+        color: var(--text);
+      }
+      .stat-card.known .value {
+        color: var(--green);
+      }
+      .stat-card.unknown .value {
+        color: var(--yellow);
+      }
+      .stat-card.people .value {
+        color: #74b9ff;
+      }
+
+      /* ── Two-column layout ───────────────────────── */
+      .grid2 {
+        display: grid;
+        grid-template-columns: 1fr 340px;
+        gap: 20px;
+      }
+      @media (max-width: 900px) {
+        .grid2 {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      /* ── Panel ───────────────────────────────────── */
+      .panel {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        overflow: hidden;
+      }
+      .panel-header {
+        padding: 12px 16px;
+        border-bottom: 1px solid var(--border);
+        font-size: 12px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        color: var(--muted);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+      .panel-body {
+        padding: 0;
+      }
+
+      /* ── Detections table ────────────────────────── */
+      .det-table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      .det-table th {
+        background: var(--bg3);
+        padding: 8px 12px;
+        text-align: left;
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: var(--muted);
+        border-bottom: 1px solid var(--border);
+        position: sticky;
+        top: 0;
+      }
+      .det-table td {
+        padding: 8px 12px;
+        border-bottom: 1px solid var(--border);
+        vertical-align: middle;
+      }
+      .det-table tr:last-child td {
+        border-bottom: none;
+      }
+      .det-table tr:hover td {
+        background: var(--bg3);
+      }
+
+      .table-wrap {
+        max-height: 520px;
+        overflow-y: auto;
+      }
+
+      .badge {
+        display: inline-block;
+        padding: 2px 8px;
+        border-radius: 20px;
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.5px;
+      }
+      .badge.known {
+        background: rgba(46, 204, 113, 0.15);
+        color: var(--green);
+        border: 1px solid rgba(46, 204, 113, 0.3);
+      }
+      .badge.unknown {
+        background: rgba(243, 156, 18, 0.15);
+        color: var(--yellow);
+        border: 1px solid rgba(243, 156, 18, 0.3);
+      }
+
+      .score {
+        font-family: var(--mono);
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .name {
+        font-weight: 600;
+      }
+      .ts {
+        font-size: 11px;
+        color: var(--muted);
+        white-space: nowrap;
+      }
+
+      /* ── Right sidebar ───────────────────────────── */
+      .sidebar {
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+      }
+
+      /* Top people list */
+      .people-list {
+        list-style: none;
+      }
+      .people-list li {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 9px 16px;
+        border-bottom: 1px solid var(--border);
+        font-size: 13px;
+      }
+      .people-list li:last-child {
+        border-bottom: none;
+      }
+      .people-list .count {
+        background: var(--accent2);
+        color: #74b9ff;
+        border-radius: 10px;
+        padding: 1px 8px;
+        font-size: 11px;
+        font-weight: 600;
+      }
+
+      /* Log panel */
+      .log-box {
+        font-family: var(--mono);
+        font-size: 11px;
+        color: #a8ff78;
+        background: #0d0d0d;
+        padding: 12px 14px;
+        max-height: 220px;
+        overflow-y: auto;
+        white-space: pre-wrap;
+        word-break: break-all;
+        line-height: 1.5;
+      }
+
+      /* ── Gallery panel ───────────────────────────── */
+      .gallery-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+        gap: 12px;
+        padding: 16px;
+      }
+      .gallery-person {
+        text-align: center;
+        background: var(--bg3);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 10px 6px;
+      }
+      .gallery-person .avatar {
+        width: 52px;
+        height: 52px;
+        border-radius: 50%;
+        background: var(--accent2);
+        margin: 0 auto 6px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 22px;
+        color: #74b9ff;
+        font-weight: 700;
+      }
+      .gallery-person .gname {
+        font-size: 11px;
+        font-weight: 600;
+        word-break: break-word;
+      }
+      .gallery-person .gemb {
+        font-size: 10px;
+        color: var(--muted);
+        margin-top: 2px;
+      }
+
+      /* ── Tabs ────────────────────────────────────── */
+      .tabs {
+        display: flex;
+        border-bottom: 1px solid var(--border);
+        padding: 0 16px;
+      }
+      .tab {
+        padding: 10px 16px;
+        cursor: pointer;
+        font-size: 12px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: var(--muted);
+        border-bottom: 2px solid transparent;
+        margin-bottom: -1px;
+        user-select: none;
+      }
+      .tab.active {
+        color: var(--accent);
+        border-bottom-color: var(--accent);
+      }
+
+      .tab-panel {
+        display: none;
+      }
+      .tab-panel.active {
+        display: block;
+      }
+
+      /* ── Misc ────────────────────────────────────── */
+      .empty-state {
+        padding: 32px;
+        text-align: center;
+        color: var(--muted);
+      }
+      #last-update {
+        font-size: 11px;
+        color: var(--muted);
+      }
+      .refresh-badge {
+        font-size: 10px;
+        background: var(--bg3);
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        padding: 2px 6px;
+        color: var(--muted);
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <span class="logo">SURVIL</span>
+      <div class="header-right">
+        <span id="pipeline-status">
+          <span class="status-dot" id="status-dot"></span>
+          <span id="status-text">Connecting…</span>
+        </span>
+        <span id="last-update">—</span>
+        <span class="refresh-badge">auto-refresh 5s</span>
+      </div>
+    </header>
+
+    <main>
+      <!-- Stat cards -->
+      <div class="stats-row">
+        <div class="stat-card total">
+          <div class="label">Total detections</div>
+          <div class="value" id="stat-total">—</div>
+        </div>
+        <div class="stat-card known">
+          <div class="label">Known</div>
+          <div class="value" id="stat-known">—</div>
+        </div>
+        <div class="stat-card unknown">
+          <div class="label">Unknown</div>
+          <div class="value" id="stat-unknown">—</div>
+        </div>
+        <div class="stat-card people">
+          <div class="label">Unique people</div>
+          <div class="value" id="stat-people">—</div>
+        </div>
+      </div>
+
+      <!-- Main grid -->
+      <div class="grid2">
+        <!-- Left: detections + gallery tabs -->
+        <div class="panel">
+          <div class="tabs">
+            <div class="tab active" onclick="switchTab('detections', this)">
+              Detections
+            </div>
+            <div class="tab" onclick="switchTab('gallery', this)">Gallery</div>
+          </div>
+
+          <!-- Detections tab -->
+          <div class="tab-panel active" id="tab-detections">
+            <div class="table-wrap">
+              <table class="det-table">
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Status</th>
+                    <th>Score</th>
+                    <th>Time</th>
+                  </tr>
+                </thead>
+                <tbody id="det-tbody">
+                  <tr>
+                    <td colspan="4" class="empty-state">Loading…</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Gallery tab -->
+          <div class="tab-panel" id="tab-gallery">
+            <div class="gallery-grid" id="gallery-grid">
+              <div class="empty-state" style="grid-column: 1/-1">
+                Loading gallery…
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right sidebar -->
+        <div class="sidebar">
+          <!-- Top people -->
+          <div class="panel">
+            <div class="panel-header">Top detections (today)</div>
+            <div class="panel-body">
+              <ul class="people-list" id="top-people">
+                <li style="color: var(--muted); justify-content: center">
+                  Loading…
+                </li>
+              </ul>
+            </div>
+          </div>
+
+          <!-- Pipeline log -->
+          <div class="panel">
+            <div class="panel-header">
+              Pipeline log
+              <span
+                id="log-lines"
+                style="font-size: 10px; color: var(--muted)"
+              ></span>
+            </div>
+            <div class="panel-body">
+              <div class="log-box" id="log-box">(waiting for log…)</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <script>
+      let lastDetCount = 0;
+
+      // ── Tab switching ──────────────────────────────
+      function switchTab(name, el) {
+        document
+          .querySelectorAll(".tab")
+          .forEach((t) => t.classList.remove("active"));
+        document
+          .querySelectorAll(".tab-panel")
+          .forEach((p) => p.classList.remove("active"));
+        el.classList.add("active");
+        document.getElementById("tab-" + name).classList.add("active");
+        if (name === "gallery") fetchGallery();
+      }
+
+      // ── Helpers ────────────────────────────────────
+      function fmtTime(ts) {
+        if (!ts) return "—";
+        try {
+          const d = new Date(ts);
+          return d.toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+          });
+        } catch {
+          return ts;
+        }
+      }
+
+      function fmtScore(s) {
+        const n = parseFloat(s);
+        return isNaN(n) ? "—" : n.toFixed(3);
+      }
+
+      function escHtml(s) {
+        return String(s)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;");
+      }
+
+      // ── Fetch detections ───────────────────────────
+      async function fetchDetections() {
+        try {
+          const res = await fetch("/api/detections");
+          const data = await res.json();
+
+          // Status dot
+          const dot = document.getElementById("status-dot");
+          const stxt = document.getElementById("status-text");
+          if (data.csv_exists) {
+            dot.classList.add("live");
+            stxt.textContent = "Pipeline running";
+          } else {
+            dot.classList.remove("live");
+            stxt.textContent = "No detections yet";
+          }
+
+          // Last update
+          document.getElementById("last-update").textContent =
+            "Updated " + new Date().toLocaleTimeString();
+
+          // Stat cards
+          const s = data.stats;
+          document.getElementById("stat-total").textContent = s.total;
+          document.getElementById("stat-known").textContent = s.known;
+          document.getElementById("stat-unknown").textContent = s.unknown;
+          document.getElementById("stat-people").textContent =
+            s.top_people.length;
+
+          // Top people sidebar
+          const tpEl = document.getElementById("top-people");
+          if (s.top_people.length === 0) {
+            tpEl.innerHTML =
+              '<li style="color:var(--muted);justify-content:center">No data yet</li>';
+          } else {
+            tpEl.innerHTML = s.top_people
+              .map(
+                (p) =>
+                  `<li><span>${escHtml(p.name)}</span><span class="count">${p.count}</span></li>`,
+              )
+              .join("");
+          }
+
+          // Detections table
+          const tbody = document.getElementById("det-tbody");
+          if (data.detections.length === 0) {
+            tbody.innerHTML =
+              '<tr><td colspan="4" class="empty-state">No detections yet. Is the pipeline running?</td></tr>';
+          } else {
+            tbody.innerHTML = data.detections
+              .map((d) => {
+                const isKnown = (d.status || "").toLowerCase() === "known";
+                return `
+             <tr>
+              <td><span class="name">${escHtml(d.name || "Unknown")}</span></td>
+              <td><span class="badge ${isKnown ? "known" : "unknown"}">${escHtml(d.status || "unknown")}</span></td>
+              <td><span class="score">${fmtScore(d.confidence)}</span></td>
               <td><span class="ts">${fmtTime(d.timestamp)}</span></td>
             </tr>`;
-        }).join('');
+              })
+              .join("");
+          }
+
+          lastDetCount = data.detections.length;
+        } catch (e) {
+          document.getElementById("status-text").textContent =
+            "Dashboard offline";
+          document.getElementById("status-dot").classList.remove("live");
+        }
       }
 
-      lastDetCount = data.detections.length;
-
-    } catch (e) {
-      document.getElementById('status-text').textContent = 'Dashboard offline';
-      document.getElementById('status-dot').classList.remove('live');
-    }
-  }
-
-  // ── Fetch pipeline log ─────────────────────────
-  async function fetchLog() {
-    try {
-      const res  = await fetch('/api/log');
-      const data = await res.json();
-      const box  = document.getElementById('log-box');
-      box.textContent = data.log;
-      box.scrollTop   = box.scrollHeight;
-      const lines = data.log.split('\n').length;
-      document.getElementById('log-lines').textContent = lines + ' lines';
-    } catch { /* silent */ }
-  }
-
-  // ── Fetch gallery ──────────────────────────────
-  async function fetchGallery() {
-    try {
-      const res  = await fetch('/api/people');
-      const data = await res.json();
-      const grid = document.getElementById('gallery-grid');
-
-      if (!data.people || data.people.length === 0) {
-        grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1">No people in gallery yet.<br>Use Build Dataset in the launcher.</div>';
-        return;
+      // ── Fetch pipeline log ─────────────────────────
+      async function fetchLog() {
+        try {
+          const res = await fetch("/api/log");
+          const data = await res.json();
+          const box = document.getElementById("log-box");
+          box.textContent = data.log;
+          box.scrollTop = box.scrollHeight;
+          const lines = data.log.split("\n").length;
+          document.getElementById("log-lines").textContent = lines + " lines";
+        } catch {
+          /* silent */
+        }
       }
 
-      grid.innerHTML = data.people.map(p => {
-        const initial = (p.name || '?')[0].toUpperCase();
-        return `
+      // ── Fetch gallery ──────────────────────────────
+      async function fetchGallery() {
+        try {
+          const res = await fetch("/api/people");
+          const data = await res.json();
+          const grid = document.getElementById("gallery-grid");
+
+          if (!data.people || data.people.length === 0) {
+            grid.innerHTML =
+              '<div class="empty-state" style="grid-column:1/-1">No people in gallery yet.<br>Use Build Dataset in the launcher.</div>';
+            return;
+          }
+
+          grid.innerHTML = data.people
+            .map((p) => {
+              const initial = (p.name || "?")[0].toUpperCase();
+              return `
           <div class="gallery-person">
             <div class="avatar">${escHtml(initial)}</div>
             <div class="gname">${escHtml(p.name)}</div>
             <div class="gemb">${p.count} emb</div>
           </div>`;
-      }).join('');
-    } catch { /* silent */ }
-  }
+            })
+            .join("");
+        } catch {
+          /* silent */
+        }
+      }
 
-  // ── Poll loop ──────────────────────────────────
-  fetchDetections();
-  fetchLog();
+      // ── Poll loop ──────────────────────────────────
+      fetchDetections();
+      fetchLog();
 
-  setInterval(fetchDetections, 5000);
-  setInterval(fetchLog, 6000);
-</script>
-</body>
+      setInterval(fetchDetections, 5000);
+      setInterval(fetchLog, 6000);
+    </script>
+  </body>
 </html>

@@ -29,7 +29,8 @@ logger = logging.getLogger(__name__)
 _CONFIG_PATH = Path("config.json")
 
 DEFAULT_CONFIG: dict = {
-    "rtsp_url": "rtsp://192.168.1.10/stream1",
+    # "rtsp_url": "rtsp://192.168.1.10/stream1",
+    "vedio" : 0,
     "db_path": "data/face_db",
     "collection_name": "face_gallery",
     "model_dir": "models/buffalo_l",
@@ -124,9 +125,11 @@ class PipelineService:
         except Exception as e:
             logger.error("Failed to start dashboard: %s", e)
             return False
-        
+
     def stop_dashboard(self, timeout: float = 5.0) -> bool:
         if self._flask_proc is None or self._flask_proc.poll() is not None:
+            # Check if Flask is running on the port
+            # (optional - find and kill process on port 5000)
             return True
         try:
             self._flask_proc.terminate()
@@ -136,7 +139,7 @@ class PipelineService:
             self._flask_proc.wait()
         self._flask_proc = None
         return True
-    
+
     def find_existing_process(self) -> Optional[int]:
         """Find existing pipeline process by checking for a stored PID file."""
         pid_file = Path("pipeline.pid")
@@ -184,20 +187,30 @@ class PipelineService:
             str(Path("core") / "pipeline.py"),
         ]
 
-        # Decide whether source is RTSP or video file/webcam
-        src = cfg["rtsp_url"].strip()
-        if src.startswith("rtsp://"):
-            cmd += ["--rtsp", src]
-        else:
-            # Assume it's a video file path or webcam index (e.g. "0")
+        # Decide whether source is RTSP or video file/webcam 
+        if cfg.get("video"):
+            src = str(cfg["video"]).strip()
             cmd += ["--video", src]
+        elif cfg.get("rtsp"):
+            src = cfg["rtsp"].strip()
+            cmd += ["--rtsp", src]
+        elif cfg.get("rtsp_url"):
+            # Fallback to old behavior
+            src = cfg["rtsp_url"].strip()
+            if src.startswith("rtsp://"):
+                cmd += ["--rtsp", src]
+            elif src:
+                cmd += ["--video", src]
+        else:
+            logger.error("No video source configured")
+            return False
+        
 
         cmd += [
             "--db-path", cfg["db_path"],
             "--collection-name", cfg["collection_name"],
             "--yunet-model", cfg["detector_model"],
             "--output-csv", cfg["detections_csv"],
-            "--crops-dir", cfg["crops_dir"],
             "--threshold-accept", str(cfg["score_threshold"]),
             "--refresh-interval", str(cfg["gallery_refresh_sec"]),
         ]
@@ -220,7 +233,7 @@ class PipelineService:
                 **kwargs,
             )
             logger.info("Pipeline started — PID %s", self._proc.pid)
-            
+
             # Store PID for future launcher instances
             with open(Path("pipeline.pid"), "w") as f:
                 f.write(str(self._proc.pid))
@@ -228,21 +241,41 @@ class PipelineService:
         except Exception as e:
             logger.error("Failed to start pipeline: %s", e)
             return False
-        
-
+    
     def stop(self, timeout: float = 5.0) -> bool:
         """Stop pipeline AND dashboard."""
-        self.stop_dashboard()  # ← ADD THIS
-    
-        if self._proc is None or self._proc.poll() is not None:
-            return True
-        try:
-            self._proc.terminate()
-            self._proc.wait(timeout=timeout)
-        except subprocess.TimeoutExpired:
-            self._proc.kill()
-            self._proc.wait()
-        self._proc = None
+        # Stop dashboard first
+        self.stop_dashboard()
+
+        # If we have a subprocess object, stop it
+        if self._proc is not None and self._proc.poll() is None:
+            try:
+                self._proc.terminate()
+                self._proc.wait(timeout=timeout)
+            except subprocess.TimeoutExpired:
+                self._proc.kill()
+                self._proc.wait()
+            self._proc = None
+
+        # Also check PID file for orphaned processes
+        pid_file = Path("pipeline.pid")
+        if pid_file.exists():
+            try:
+                with open(pid_file, "r") as f:
+                    stored_pid = int(f.read().strip())
+                
+                # Kill the process
+                if sys.platform == "win32":
+                    subprocess.run(["taskkill", "/PID", str(stored_pid), "/F"], 
+                            capture_output=True)
+                else:
+                    os.kill(stored_pid, 9)  # SIGKILL
+                
+                pid_file.unlink(missing_ok=True)
+            except Exception as e:
+                logger.warning("Failed to kill orphaned process: %s", e)
+                pid_file.unlink(missing_ok=True)
+
         return True
 
     def is_running(self) -> bool:
@@ -250,14 +283,14 @@ class PipelineService:
         # If we have a subprocess object, check its status
         if self._proc is not None and self._proc.poll() is None:
             return True
-        
+
         # If _proc is None or terminated, check if there's a valid PID file with running process
         pid_file = Path("pipeline.pid")
         if pid_file.exists():
             try:
                 with open(pid_file, "r") as f:
                     stored_pid = int(f.read().strip())
-                
+
                 # Verify the process is still running
                 if sys.platform == "win32":
                     result = subprocess.run(
@@ -272,7 +305,7 @@ class PipelineService:
             except Exception:
                 # If we can't verify, clean up the stale PID file
                 pid_file.unlink(missing_ok=True)
-        
+
         return False
 
     def pid(self) -> Optional[int]:
@@ -280,14 +313,14 @@ class PipelineService:
         # First check if we have a live subprocess object
         if self._proc is not None and self._proc.poll() is None:
             return self._proc.pid
-        
+
         # Check if there's a valid PID file with running process
         pid_file = Path("pipeline.pid")
         if pid_file.exists():
             try:
                 with open(pid_file, "r") as f:
                     stored_pid = int(f.read().strip())
-                
+
                 # Verify the process is still running
                 if sys.platform == "win32":
                     result = subprocess.run(
@@ -304,10 +337,10 @@ class PipelineService:
                         pass
             except Exception:
                 pass
-            
+
             # Clean up stale PID file
             pid_file.unlink(missing_ok=True)
-        
+
         return None
 
     def exit_code(self) -> Optional[int]:

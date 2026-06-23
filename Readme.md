@@ -81,7 +81,7 @@ pip install onnxruntime-gpu
 Open the launcher and use the Build Dataset window to add people:
 
 ```bash
-python launcher/launcher.py
+python launcher/main.py
 ```
 
 Click **Build Dataset**, enter a person's name, select a folder of their photos (5–20 clear face images recommended), click **Add to Gallery**. Repeat for each person.
@@ -129,12 +129,11 @@ python dashboard/app.py
 
 Open in any browser on the same LAN:
 ```
-http://localhost:5000          ← on the same PC
-http://192.168.1.x:5000        ← from any device on LAN
+http://localhost:5002         ← on the same PC
+http://192.168.1.x:5002        ← from any device on LAN
 ```
 
 The dashboard auto-refreshes every 5 seconds and shows:
-- Detection feed with face crop thumbnails
 - Known / unknown counts
 - Top detected people
 - Pipeline log tail
@@ -192,13 +191,12 @@ journalctl -u survil -f    # live logs
 | `model_dir` | `models/buffalo_l` | InsightFace model directory |
 | `detector_model` | `models/face_detection_yunet_2023mar.onnx` | YuNet model path |
 | `detections_csv` | `data/detections.csv` | Detection log output path |
-| `crops_dir` | `dashboard/static/crops` | Face crop images output directory |
 | `headless` | `true` | Skip cv2.imshow (required on servers) |
 | `gallery_refresh_sec` | `60` | How often pipeline reloads gallery from ChromaDB |
 | `score_threshold` | `0.25` | Minimum cosine similarity to call a match "known" |
 | `nms_threshold` | `0.3` | YuNet NMS threshold |
 | `confidence_threshold` | `0.7` | YuNet face confidence threshold |
-| `flask_port` | `5000` | Dashboard server port |
+| `flask_port` | `5002` | Dashboard server port |
 
 ---
 
@@ -226,7 +224,7 @@ No need to stop or restart the detection pipeline.
 
 **Dashboard not loading**
 - Confirm `python dashboard/app.py` is running
-- Check port 5000 is not blocked by firewall
+- Check port 5002 is not blocked by firewall
 - On Windows: allow Python through Windows Defender Firewall
 
 **cv2.imshow crash on server / macOS**

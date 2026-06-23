@@ -113,7 +113,7 @@ class YuNetDetector:
         model_path: str,
         score_threshold: float = 0.55,
         nms_threshold: float   = 0.30,
-        top_k: int             = 5000,
+        top_k: int             = 5002,
     ):
         self._det = cv2.FaceDetectorYN.create(
             model_path, "",

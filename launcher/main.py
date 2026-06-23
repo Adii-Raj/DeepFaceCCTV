@@ -1,5 +1,5 @@
 """
-launcher/launcher.py
+launcher/main.py
 --------------------
 Tkinter UI for Survil — setup wizard / control panel.
 Single responsibility: UI only.
@@ -17,7 +17,7 @@ Flow
 6. Status bar polls is_running() every 2 seconds
 
 Run from project root:
-    python launcher/launcher.py
+    python launcher/main.py
 """
 
 from __future__ import annotations
@@ -74,7 +74,6 @@ class LauncherWindow(tk.Tk):
     _POLL_INTERVAL_MS = 2000   # status poll every 2 seconds
     _LOG_REFRESH_MS = 3000     # log tail refresh every 3 seconds
 
-
     def __init__(self):
         super().__init__()
         self.title("Survil — CCTV Face Identification")
@@ -83,27 +82,27 @@ class LauncherWindow(tk.Tk):
 
         # Import service here (after sys.path is set)
         from launcher.service import PipelineService, load_config, save_config
-        
+
         # ... header, title, geometry code here ...
-        
+
         # Store config functions first
         self._load_config = load_config
         self._save_config = save_config
-        
+
         # Load config
         self._cfg = load_config()
-        
+
         # Create service
         self._svc = PipelineService()
-        
+
         # Check if old pipeline is running
         existing_pid = self._svc.find_existing_process()
-        
+
         # Build UI (needs self._cfg)
         self._build_ui()
         self._load_config_into_ui()
         self._start_polling()
-        
+
         self.protocol("WM_DELETE_WINDOW", self._on_close)
 
     # ------------------------------------------------------------------
@@ -168,6 +167,7 @@ class LauncherWindow(tk.Tk):
             row=0, column=1, columnspan=2, sticky="ew", padx=4, pady=4
         )
 
+        
         # DB path
         ttk.Label(cfg_frame, text="DB path:").grid(
             row=1, column=0, sticky="w", padx=8, pady=4

@@ -10,7 +10,7 @@ Run from project root:
     python dashboard/app.py
 
 Or start it programmatically from launcher/service.py.
-Accessible on LAN: http://<machine-ip>:5000
+Accessible on LAN: http://<machine-ip>:5002
 """
 
 from __future__ import annotations
@@ -22,10 +22,12 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-from flask import Flask, jsonify, render_template, send_from_directory
+
+from flask import Flask, jsonify, render_template, send_from_directory  # type: ignore[import]
 
 # ---------------------------------------------------------------------------
 # Path setup
+# ---------------------------------------------------------------------------
 # ---------------------------------------------------------------------------
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -44,14 +46,17 @@ app = Flask(
     static_folder="static",
 )
 
+app.config["TEMPLATES_AUTO_RELOAD"] = True
+app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 0
+
 _CONFIG_PATH = _PROJECT_ROOT / "config.json"
 _DEFAULT_CSV = _PROJECT_ROOT / "data" / "detections.csv"
-_DEFAULT_CROPS = _PROJECT_ROOT / "dashboard" / "static" / "crops"
 
 
 # ---------------------------------------------------------------------------
 # Config helper
 # ---------------------------------------------------------------------------
+
 
 def _load_config() -> dict:
     try:
@@ -70,13 +75,14 @@ def _csv_path() -> Path:
 # CSV reader
 # ---------------------------------------------------------------------------
 
+
 def _read_detections(limit: int = 200) -> list[dict]:
     """
     Read the last `limit` rows from detections.csv.
     Returns list of dicts, newest first.
 
     Expected CSV columns (written by core/logger.py):
-        timestamp, name, score, status, crop_path
+        timestamp, name, score, status
     """
     path = _csv_path()
     if not path.exists():
@@ -94,14 +100,9 @@ def _read_detections(limit: int = 200) -> list[dict]:
     # Newest first, capped at limit
     rows = rows[-limit:][::-1]
 
-    # Normalise crop_path to a URL-friendly path under /static/crops/
+    #crop url is empty
     for row in rows:
-        crop = row.get("crop_path", "")
-        if crop:
-            crop_file = Path(crop).name
-            row["crop_url"] = f"/static/crops/{crop_file}"
-        else:
-            row["crop_url"] = ""
+        row["crop_url"] = ""
 
     return rows
 
@@ -132,10 +133,16 @@ def _summary_stats(rows: list[dict]) -> dict:
 # Routes
 # ---------------------------------------------------------------------------
 
+
 @app.route("/")
 def index():
-    """Main dashboard page."""
-    return render_template("index.html")
+    """Serve index.html directly from file."""
+    import os
+    from flask import send_file
+
+    # Force use the file you just edited
+    path = os.path.join(os.getcwd(), "dashboard", "templates", "index.html")
+    return send_file(path)
 
 
 @app.route("/api/detections")
@@ -147,13 +154,15 @@ def api_detections():
     """
     rows = _read_detections(200)
     stats = _summary_stats(rows)
-    return jsonify({
-        "detections": rows,
-        "stats": stats,
-        "pipeline_log_exists": Path("pipeline.log").exists(),
-        "csv_exists": _csv_path().exists(),
-        "server_time": datetime.now(timezone.utc).isoformat(),
-    })
+    return jsonify(
+        {
+            "detections": rows,
+            "stats": stats,
+            "pipeline_log_exists": Path("pipeline.log").exists(),
+            "csv_exists": _csv_path().exists(),
+            "server_time": datetime.now(timezone.utc).isoformat(),
+        }
+    )
 
 
 @app.route("/api/stats")
@@ -171,6 +180,7 @@ def api_people():
     """
     try:
         from builder.db_ops import list_people
+
         cfg = _load_config()
         people = list_people(db_path=cfg.get("db_path", "data/face_db"))
         return jsonify({"people": people})
@@ -192,11 +202,26 @@ def api_log():
         return jsonify({"log": f"Error reading log: {e}"})
 
 
-@app.route("/static/crops/<path:filename>")
-def serve_crop(filename):
-    """Serve face crop images saved by core/logger.py."""
-    crops_dir = str(_DEFAULT_CROPS)
-    return send_from_directory(crops_dir, filename)
+@app.after_request
+def add_header(response):
+    response.headers["Cache-Control"] = (
+        "no-cache, no-store, must-revalidate, public, max-age=0"
+    )
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    return response
+
+
+@app.route("/debugfile")
+def debugfile():
+    import os
+
+    path = os.path.join(app.root_path, "templates", "index.html")
+    return {
+        "template_path": path,
+        "exists": os.path.exists(path),
+        "size": os.path.getsize(path) if os.path.exists(path) else 0,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -205,7 +230,7 @@ def serve_crop(filename):
 
 if __name__ == "__main__":
     cfg = _load_config()
-    port = cfg.get("flask_port", 5000)
+    port = 5002
 
     print(f"Survil dashboard -> http://localhost:{port}")
     print(f"LAN access       -> http://<your-ip>:{port}")

@@ -1,4 +1,3 @@
-
 import argparse
 import json
 import os
@@ -9,8 +8,8 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from collections import deque
 from pathlib import Path
-
 import cv2
+
 import numpy as np
 
 import sys
@@ -52,7 +51,6 @@ DEFAULTS = {
     "collection_name":    "face_gallery",
     "refresh_interval":   60,
     "output_csv":         "data/detections.csv",
-    "crops_dir":          "dashboard/static/crops",
     "yunet_model":        "models/face_detection_yunet_2023mar.onnx",
     "sface_model":        "models/face_recognition_sface_2021dec.onnx",
     "threshold_accept":   0.48,
@@ -65,7 +63,6 @@ DEFAULTS = {
     "det_confidence":     0.55,
     "recognition_interval": 4,
     "log_cooldown":       3.0,
-    "save_crops":         True,
 }
 
 
@@ -119,7 +116,6 @@ def parse_args(args=None) -> argparse.Namespace:
 
     # Output
     p.add_argument("--output-csv",  help="Path to detections CSV")
-    p.add_argument("--crops-dir",   help="Directory to save face crop images")
 
     # Models
     p.add_argument("--yunet-model", help="Path to YuNet ONNX model")
@@ -153,7 +149,6 @@ def _merge_args_into_config(args: argparse.Namespace, cfg: dict) -> dict:
         "collection_name":      args.collection_name,
         "refresh_interval":     args.refresh_interval,
         "output_csv":           args.output_csv,
-        "crops_dir":            args.crops_dir,
         "yunet_model":          args.yunet_model,
         "sface_model":          args.sface_model,
         "threshold_accept":     args.threshold_accept,
@@ -226,7 +221,7 @@ def _capture_worker(src, is_rtsp, transport, fq, stop, reconnect_event):
     backoff = 1.0
     consecutive_black_frames = 0
     MAX_BLACK_FRAMES = 10  # Trigger reconnect after 10 consecutive black frames
-    
+
     cap = _open_capture(src, is_rtsp, transport)
     if not cap.isOpened():
         print(f"[pipeline] ERROR: Cannot open source: {src}")
@@ -236,10 +231,10 @@ def _capture_worker(src, is_rtsp, transport, fq, stop, reconnect_event):
 
     while not stop.is_set():
         ret, frame = cap.read()
-        
+
         if not ret or _is_frame_black(frame):
             consecutive_black_frames += 1
-            
+
             if ret and _is_frame_black(frame):
                 # Frame read OK but is black - network lag
                 if consecutive_black_frames == 1:
@@ -250,7 +245,7 @@ def _capture_worker(src, is_rtsp, transport, fq, stop, reconnect_event):
                     print("[pipeline] End of file.")
                     stop.set()
                     break
-            
+
             if consecutive_black_frames >= MAX_BLACK_FRAMES:
                 if not reconnect_event.is_set():
                     reconnect_event.set()
@@ -265,40 +260,48 @@ def _capture_worker(src, is_rtsp, transport, fq, stop, reconnect_event):
                     consecutive_black_frames = 0
                     print("[pipeline] Stream reconnected.")
                 continue
-            
+
             # Skip putting black frame in queue
             continue
-        
+
         # Good frame - reset black frame counter and backoff
         consecutive_black_frames = 0
         backoff = 1.0
         vt = cap.get(cv2.CAP_PROP_POS_MSEC) / 1000.0
-        
+
         try:
             fq.put_nowait((frame, vt))
         except queue.Full:
             pass
-    
+
     cap.release()
 
 
 # ── Embed job (runs in thread pool) ──────────────────────────────────────────
 
+
 def _submit_embed(
-    recogniser, use_insightface,
-    frame_snap, full_row,
-    disp_w, disp_h,
-    track, gallery, cfg, logger,
+    recogniser,
+    use_insightface,
+    frame_snap,
+    full_row,
+    disp_w,
+    disp_h,
+    track,
+    gallery,
+    cfg,
+    logger,
 ):
     """
     Extract embedding and cast a vote on the track.
     Runs in _embed_pool (off the main process thread).
     """
     try:
-        # Extract crop
+        # Extract crop for embedding ONLY (not saved)
         x, y, w, h = [int(v) for v in full_row[:4]]
         if use_insightface:
-            px   = int(w * 0.20); py = int(h * 0.20)
+            px = int(w * 0.20)
+            py = int(h * 0.20)
             crop = frame_snap[
                 max(0, y - py) : min(disp_h, y + h + py),
                 max(0, x - px) : min(disp_w, x + w + px),
@@ -309,25 +312,25 @@ def _submit_embed(
                 max(0, x) : min(disp_w, x + w),
             ]
 
-        # Quality gates
+        # Quality gates — check if face is good enough
         passes, skip_reason = passes_quality_gates(
-            full_row, crop,
-            max_yaw        = cfg["max_yaw"],
-            min_face_size  = cfg["min_face_size"],
-            blur_threshold = cfg["blur_threshold"],
+            full_row,
+            crop,
+            max_yaw=cfg["max_yaw"],
+            min_face_size=cfg["min_face_size"],
+            blur_threshold=cfg["blur_threshold"],
         )
         if not passes:
             track.votes.append((skip_reason, "skip"))
             return
 
-        # Embed
+        # Embed — convert face crop to 512-number fingerprint
         if use_insightface:
-            emb = recogniser.embed(crop) if crop.size > 0 \
-                  else np.zeros(512, np.float32)
+            emb = recogniser.embed(crop) if crop.size > 0 else np.zeros(512, np.float32)
         else:
             emb = recogniser.embed_with_landmarks(frame_snap, full_row)
 
-        # Match
+        # Match against known people in gallery
         name, score, status = gallery.match(
             emb,
             cfg["threshold_accept"],
@@ -336,16 +339,14 @@ def _submit_embed(
         )
         track.score = score
 
-        # Vote
+        # Vote system — builds confidence over multiple frames
         track.votes.append((name, status))
         d_name, d_status = resolve_vote(track.votes)
-        track.display_name   = d_name
+        track.display_name = d_name
         track.display_status = d_status
 
-        # Log if confirmed
-        logger.log(d_name, score,
-                   getattr(track, "_last_vt", 0.0),
-                   d_status, crop)
+        # Log to CSV — NO crop image passed, NO crop saved
+        logger.log(d_name, score, getattr(track, "_last_vt", 0.0), d_status)
 
     except Exception as e:
         print(f"[pipeline] Embed job error: {e}")
@@ -489,9 +490,7 @@ def run(cfg: dict):
 
     logger = DetectionLogger(
         csv_path   = cfg["output_csv"],
-        crops_dir  = cfg["crops_dir"],
         cooldown   = cfg.get("log_cooldown", 3.0),
-        save_crops = cfg.get("save_crops", True),
     )
 
     src, is_rtsp, src_label = _build_source(cfg)

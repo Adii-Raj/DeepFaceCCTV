@@ -21,7 +21,6 @@ import numpy as np
 
 from core.tracker import POSE_SKIP, QUALITY_SKIP, SKIP_TOKENS, MIN_VOTES
 
-
 # ── 1. Yaw estimator ──────────────────────────────────────────────────────────
 
 def estimate_yaw(face_row: np.ndarray) -> float:
@@ -46,20 +45,21 @@ def estimate_yaw(face_row: np.ndarray) -> float:
         Estimated yaw in degrees [0, 90+].
         Returns 999.0 for degenerate / invalid detections.
     """
-    lx = face_row[4]   # left eye x
-    rx = face_row[6]   # right eye x
-    nx = face_row[8]   # nose tip x
+    lx = face_row[4]  # left eye x
+    rx = face_row[6]  # right eye x
+    nx = face_row[8]  # nose tip x
 
     eye_dist = rx - lx
     if eye_dist < 4.0:
-        return 999.0   # degenerate detection
+        return 999.0  # degenerate detection
 
-    ratio = (nx - lx) / eye_dist      # frontal ≈ 0.5
-    yaw   = abs(ratio - 0.5) * 90.0   # 0° frontal -> 45° at full side
+    ratio = (nx - lx) / eye_dist  # frontal ≈ 0.5
+    yaw = abs(ratio - 0.5) * 90.0  # 0° frontal -> 45° at full side
     return yaw
 
 
 # ── 2. Interocular distance gate ──────────────────────────────────────────────
+
 
 def interocular_distance(face_row: np.ndarray) -> float:
     """
@@ -78,10 +78,11 @@ def interocular_distance(face_row: np.ndarray) -> float:
 
 # ── 3. Crop quality gate ──────────────────────────────────────────────────────
 
+
 def face_quality_ok(
-    crop:            np.ndarray,
-    min_size:        int   = 25,
-    blur_threshold:  float = 20.0,
+    crop: np.ndarray,
+    min_size: int = 25,
+    blur_threshold: float = 20.0,
 ) -> bool:
     """
     Returns True if the face crop passes size and sharpness checks.
@@ -103,12 +104,13 @@ def face_quality_ok(
     h, w = crop.shape[:2]
     if w < min_size or h < min_size:
         return False
-    grey        = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
-    blur_score  = cv2.Laplacian(grey, cv2.CV_64F).var()
+    grey = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
+    blur_score = cv2.Laplacian(grey, cv2.CV_64F).var()
     return blur_score >= blur_threshold
 
 
 # ── 4. Vote resolver ──────────────────────────────────────────────────────────
+
 
 def resolve_vote(vote_deque: deque) -> tuple[str, str]:
     """
@@ -128,10 +130,7 @@ def resolve_vote(vote_deque: deque) -> tuple[str, str]:
     Returns:
         (display_name, display_status)
     """
-    real_votes = [
-        (n, s) for n, s in vote_deque
-        if n not in SKIP_TOKENS
-    ]
+    real_votes = [(n, s) for n, s in vote_deque if n not in SKIP_TOKENS]
 
     if len(real_votes) < MIN_VOTES:
         return "?", "unsure"
@@ -140,22 +139,20 @@ def resolve_vote(vote_deque: deque) -> tuple[str, str]:
     winner_name = name_counts.most_common(1)[0][0]
 
     # Status = most recent status for the winning name
-    winner_status = next(
-        s for n, s in reversed(list(vote_deque))
-        if n == winner_name
-    )
+    winner_status = next(s for n, s in reversed(list(vote_deque)) if n == winner_name)
     return winner_name, winner_status
 
 
 # ── 5. Combined quality check (used by pipeline) ──────────────────────────────
 
+
 def passes_quality_gates(
-    face_row:        np.ndarray,
-    crop:            np.ndarray,
-    max_yaw:         float = 45.0,
-    min_ied:         float = 15.0,
-    min_face_size:   int   = 25,
-    blur_threshold:  float = 20.0,
+    face_row: np.ndarray,
+    crop: np.ndarray,
+    max_yaw: float = 45.0,
+    min_ied: float = 15.0,
+    min_face_size: int = 25,
+    blur_threshold: float = 20.0,
 ) -> tuple[bool, str]:
     """
     Run all quality checks in order. Returns (passes, skip_reason).
@@ -185,8 +182,7 @@ def passes_quality_gates(
     if ied < min_ied:
         return False, QUALITY_SKIP
 
-    if not face_quality_ok(crop, min_size=min_face_size,
-                           blur_threshold=blur_threshold):
+    if not face_quality_ok(crop, min_size=min_face_size, blur_threshold=blur_threshold):
         return False, QUALITY_SKIP
 
     return True, ""

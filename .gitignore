@@ -2,24 +2,35 @@
 __pycache__/
 *.py[cod]
 *.pyo
+*.egg-info/
+
+# Virtual environments
 venv/
 .venv/
-*.egg-info/
+deepface_env/
+env/
+ENV/
 
 # Runtime data — never commit these
 data/
-dashboard/static/crops/
 pipeline.log
 flask.log
 dashboard.log
 pipeline.pid
 dashboard.pid
+*.log
 
 # Models — too large for git, download separately
 models/
 
 # Config with credentials — use config.example.json instead
 config.json
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
 
 # OS
 .DS_Store
