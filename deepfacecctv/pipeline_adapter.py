@@ -24,7 +24,7 @@ def run_pipeline(cfg: Config) -> None:
 
 
 def start_dashboard(cfg: Config) -> None:
-    """Start Flask dashboard independently."""
+    """Start Flask dashboard with production WSGI server."""
     try:
         from dashboard.app import create_app
 
@@ -34,11 +34,20 @@ def start_dashboard(cfg: Config) -> None:
             host=cfg.flask_host,
             port=cfg.flask_port,
         )
-        app.run(host=cfg.flask_host, port=cfg.flask_port, debug=False)
     except ImportError:
         from dashboard.app import app
 
-        app.run(host=cfg.flask_host, port=cfg.flask_port, debug=False)
+    # Use Waitress production server instead of Flask dev server
+    from waitress import serve
+
+    print(f"[dashboard] Starting production server on {cfg.flask_host}:{cfg.flask_port}")
+    serve(
+        app,
+        host=cfg.flask_host,
+        port=cfg.flask_port,
+        threads=4,
+        channel_timeout=30,
+    )
 
 
 # ── Gallery management ─────────────────────────────────────────────────────

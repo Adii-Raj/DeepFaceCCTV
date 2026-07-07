@@ -153,9 +153,15 @@ def dashboard(
     if port is not None:
         cfg.flask_port = port
 
+    # Determine display URL
+    display_host = "localhost" if cfg.flask_host == "0.0.0.0" else cfg.flask_host
+
     console.print(
         Panel.fit(
-            f"[bold]Dashboard[/bold] on [cyan]http://{cfg.flask_host}:{cfg.flask_port}[/cyan]\n"
+            f"[bold]Dashboard[/bold] starting...\n\n"
+            f"Local access:   [cyan]http://localhost:{cfg.flask_port}[/cyan]\n"
+            f"                [cyan]http://127.0.0.1:{cfg.flask_port}[/cyan]\n"
+            f"Network access: [cyan]http://YOUR_IP:{cfg.flask_port}[/cyan]\n\n"
             f"Database: [dim]{cfg.db_path}[/dim]\n"
             f"Detections: [dim]{cfg.output_db}[/dim]",
             title="DeepFaceCCTV Dashboard",
@@ -171,6 +177,71 @@ def dashboard(
         console.print("\n[yellow]Dashboard stopped.[/yellow]")
     except Exception as exc:
         console.print(f"\n[bold red]Dashboard failed:[/bold red] {exc}")
+        raise typer.Exit(1)
+
+
+# ── Command group: status ────────────────────────────────────────────────────
+@app.command()
+def status(
+    host: Annotated[
+        Optional[str],
+        typer.Option("--host", "-h", help="Dashboard host"),
+    ] = "localhost",
+    port: Annotated[
+        Optional[int],
+        typer.Option("--port", "-p", help="Dashboard port"),
+    ] = 5002,
+) -> None:
+    """
+    Check dashboard health/status.
+
+    Verifies the dashboard server is running and database is accessible.
+    """
+    import urllib.request
+    import json
+
+    url = f"http://{host}:{port}/health"
+
+    try:
+        with urllib.request.urlopen(url, timeout=5) as response:
+            data = json.loads(response.read())
+
+            if data.get("status") == "ok":
+                console.print(
+                    Panel.fit(
+                        f"[bold green]✓ Dashboard is healthy[/bold green]\n\n"
+                        f"Database: [green]{data['db']}[/green]\n"
+                        f"Unique people: [cyan]{data['unique_people']}[/cyan]\n"
+                        f"Total detections: [dim]{data['total_detections']}[/dim]\n"
+                        f"Timestamp: {data['timestamp']}",
+                        title="Status Check",
+                        border_style="green",
+                    )
+                )
+            else:
+                console.print(
+                    Panel.fit(
+                        f"[bold red]✗ Dashboard error[/bold red]\n\n"
+                        f"Status: {data['status']}\n"
+                        f"Error: {data.get('db', 'unknown')}",
+                        title="Status Check",
+                        border_style="red",
+                    )
+                )
+                raise typer.Exit(1)
+
+    except Exception as e:
+        console.print(
+            Panel.fit(
+                f"[bold red]✗ Cannot connect to dashboard[/bold red]\n\n"
+                f"URL: [cyan]{url}[/cyan]\n"
+                f"Error: {e}\n\n"
+                f"Is the dashboard running?\n"
+                f"Start it with: [cyan]deepfacecctv dashboard[/cyan]",
+                title="Connection Failed",
+                border_style="red",
+            )
+        )
         raise typer.Exit(1)
 
 

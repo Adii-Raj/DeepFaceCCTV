@@ -203,6 +203,7 @@ python core/pipeline.py --headless
 | `deepfacecctv info` | System and project information |
 | `deepfacecctv run` | Start detection pipeline |
 | `deepfacecctv dashboard` | Start Flask web dashboard |
+| `deepfacecctv status` | Check dashboard health and database status |
 
 ### Pipeline Run
 
@@ -232,6 +233,17 @@ Options:
   --host TEXT     Server bind address [default: 0.0.0.0]
   --port INTEGER  Server port [default: 5002]
 ```
+
+### Status Check
+
+Check if the dashboard is running and verify database connectivity:
+
+```bash
+deepfacecctv status
+
+# Check remote dashboard
+deepfacecctv status --host 192.168.1.41 --port 8080
+
 
 Examples:
 ```bash
@@ -558,11 +570,3 @@ ruff check deepfacecctv/
 | CLI | Typer + Rich |
 
 ---
-
-## License
-
-MIT
-
-## Author
-
-Amrita
