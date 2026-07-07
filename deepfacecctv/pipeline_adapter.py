@@ -14,13 +14,18 @@ from deepfacecctv.config import Config
 
 
 def run_pipeline(cfg: Config) -> None:
-    """Start detection pipeline by calling pipeline.run() from project root."""
+    """Start detection pipeline."""
     legacy_cfg = cfg.to_legacy_dict()
 
-    # Import pipeline.py from project root and call its run() function
-    import pipeline as _pipeline_module
+    # Try core.pipeline first
+    try:
+        from core.pipeline import run as _legacy_run
+    except ImportError:
+        import pipeline as _pipeline_module
 
-    _pipeline_module.run(legacy_cfg)
+        _legacy_run = _pipeline_module.run
+
+    _legacy_run(legacy_cfg)
 
 
 def start_dashboard(cfg: Config) -> None:
