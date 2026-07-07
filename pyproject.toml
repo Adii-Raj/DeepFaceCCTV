@@ -1,0 +1,68 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "deepfacecctv"
+version = "1.0.0"
+description = "AI-powered CCTV face identification pipeline with real-time recognition"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.9"
+authors = [
+    {name = "Amrita", email = "amrita@example.com"}
+]
+keywords = ["face-recognition", "cctv", "deepface", "surveillance", "ai"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+dependencies = [
+    "opencv-python>=4.8.0",
+    "numpy>=1.24.0",
+    "insightface>=0.7.0",
+    "chromadb>=0.4.0",
+    "flask>=2.3.0",
+    "typer[all]>=0.9.0",
+    "rich>=13.0.0",
+    "pydantic>=2.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "black>=23.0.0",
+    "ruff>=0.1.0",
+    "mypy>=1.0.0",
+]
+
+[project.scripts]
+deepfacecctv = "deepfacecctv.cli:app"
+cctv = "deepfacecctv.cli:app"
+
+[project.urls]
+Homepage = "https://github.com/amrita/DeepFaceCCTV"
+Issues = "https://github.com/amrita/DeepFaceCCTV/issues"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["deepfacecctv*", "core*", "dashboard*", "builder*", "launcher*"]
+exclude = ["tests*", "docs*", "venv*", ".vscode*"]
+
+[tool.setuptools.package-data]
+deepfacecctv = ["py.typed"]
+
+[tool.black]
+line-length = 100
+target-version = ['py39']
+
+[tool.ruff]
+line-length = 100
+select = ["E", "F", "I", "W", "N", "UP"]

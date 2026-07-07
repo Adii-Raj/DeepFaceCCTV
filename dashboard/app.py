@@ -34,16 +34,19 @@ _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
-os.chdir(_PROJECT_ROOT)
 
 # ---------------------------------------------------------------------------
 # App setup
 # ---------------------------------------------------------------------------
 
+# NEW - use absolute paths
+_TEMPLATE_DIR = str(_PROJECT_ROOT / "dashboard" / "templates")
+_STATIC_DIR = str(_PROJECT_ROOT / "dashboard" / "static")
+
 app = Flask(
     __name__,
-    template_folder="templates",
-    static_folder="static",
+    template_folder=_TEMPLATE_DIR,
+    static_folder=_STATIC_DIR,
 )
 
 app.config["TEMPLATES_AUTO_RELOAD"] = True
@@ -149,16 +152,10 @@ def _summary_stats(rows: list[dict]) -> dict:
 # Routes
 # ---------------------------------------------------------------------------
 
-
+# new : absolute path
 @app.route("/")
 def index():
-    """Serve index.html directly from file."""
-    import os
-    from flask import send_file
-
-    # Force use the file you just edited
-    path = os.path.join(os.getcwd(), "dashboard", "templates", "index.html")
-    return send_file(path)
+    return render_template("index.html")
 
 
 @app.route("/api/detections")
@@ -238,6 +235,44 @@ def debugfile():
         "exists": os.path.exists(path),
         "size": os.path.getsize(path) if os.path.exists(path) else 0,
     }
+
+
+@app.route("/health")
+def health():
+    """
+    Health check endpoint.
+    Verifies server is alive and database is accessible.
+    Returns unique people count (not total detections).
+    """
+    try:
+        # Check database is accessible
+        conn = sqlite3.connect(str(_db_path()), timeout=2)
+        cursor = conn.cursor()
+        
+        # Count unique people (not total detections)
+        cursor.execute("SELECT COUNT(DISTINCT name) FROM detections")
+        unique_count = cursor.fetchone()[0]
+        
+        # Also get total detections for reference
+        cursor.execute("SELECT COUNT(*) FROM detections")
+        total_count = cursor.fetchone()[0]
+        
+        conn.close()
+        
+        return jsonify({
+            "status": "ok",
+            "db": "connected",
+            "unique_people": unique_count,   # Unique names, not total rows
+            "total_detections": total_count,  # For reference
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }), 200
+        
+    except Exception as e:
+        return jsonify({
+            "status": "error",
+            "db": str(e),
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }), 500
 
 
 # ---------------------------------------------------------------------------

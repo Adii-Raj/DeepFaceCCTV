@@ -1,0 +1,2 @@
+Requirement already satisfied: opencv-python in C:\Users\Amrita\AppData\Local\Programs\Python\Python311\Lib\site-packages (4.13.0.92)
+Requirement already satisfied: numpy>=2 in C:\Users\Amrita\AppData\Local\Programs\Python\Python311\Lib\site-packages (from opencv-python) (2.4.3)

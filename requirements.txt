@@ -26,3 +26,7 @@ psutil>=5.9.0
 
 # ── Utilities ─────────────────────────────────────
 requests>=2.31.0
+
+# Production server (choose one based on OS)
+waitress; platform_system=="Windows"
+gunicorn; platform_system=="Linux"
