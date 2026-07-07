@@ -38,3 +38,6 @@ Thumbs.db*.mp4
 *.avi
 *.mkv
 dataset/
+*.mp4
+*.avi
+*.mkv
