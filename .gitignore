@@ -34,4 +34,7 @@ config.json
 
 # OS
 .DS_Store
-Thumbs.db
+Thumbs.db*.mp4
+*.avi
+*.mkv
+dataset/
