@@ -42,7 +42,7 @@ DEFAULT_CONFIG: dict = {
     "score_threshold": 0.25,
     "nms_threshold": 0.3,
     "confidence_threshold": 0.7,
-    "flask_port": 5000,
+    "flask_port": 5002,
 }
 
 

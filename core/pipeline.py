@@ -180,8 +180,6 @@ def _merge_args_into_config(args: argparse.Namespace, cfg: dict) -> dict:
 
 
 # ── Video capture ─────────────────────────────────────────────────────────────
-
-
 def _open_capture(src, is_rtsp: bool, transport: str) -> cv2.VideoCapture:
     if is_rtsp:
         os.environ.setdefault(
@@ -192,10 +190,22 @@ def _open_capture(src, is_rtsp: bool, transport: str) -> cv2.VideoCapture:
         cap = cv2.VideoCapture(str(src), cv2.CAP_FFMPEG)
     else:
         src_id = int(src) if str(src).isdigit() else src
-        cap = cv2.VideoCapture(src_id,cv2.CAP_DSHOW)
+        
+        # Cross-platform camera backend
+        if sys.platform.startswith('linux'):
+            # Linux: Use V4L2
+            cap = cv2.VideoCapture(src_id, cv2.CAP_V4L2)
+        elif sys.platform == 'darwin':
+            # macOS: Use AVFoundation
+            cap = cv2.VideoCapture(src_id, cv2.CAP_AVFOUNDATION)
+        else:
+            # Windows: Use DirectShow
+            cap = cv2.VideoCapture(src_id, cv2.CAP_DSHOW)
+    
     if cap.isOpened():
         cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
     return cap
+
 
 
 def _build_source(cfg: dict):
@@ -505,10 +515,11 @@ def run(cfg: dict):
     model_ready = threading.Event()
     rec_container = [None]
     load_err = [None]
+    frame_counter = 0
 
     def _load_model():
         try:
-            rec_container[0] = load_recogniser(cfg["sface_model"])
+            rec_container[0] = load_recogniser(cfg["sface_model"], model_dir = cfg.get("model_dir"))
         except Exception as e:
             load_err[0] = e
         finally:
@@ -604,6 +615,18 @@ def run(cfg: dict):
             else:
                 # Headless: just sleep to avoid busy loop
                 time.sleep(0.01)
+                frame_counter += 1
+                
+                # Log every ~5 seconds (assuming ~30 FPS)
+                if frame_counter % 150 == 0 and last_frame is not None:
+                    logger.info(
+                        f"Running | DB: {gallery.embedding_count} identities | "
+                        f"Frame: {frame_counter}"
+                    )
+
+            # Reset to prevent overflow
+            if frame_counter > 1000000:
+                frame_counter = 0
 
     except KeyboardInterrupt:
         print("\n[pipeline] KeyboardInterrupt — shutting down …")

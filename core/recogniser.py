@@ -80,7 +80,7 @@ class InsightFaceRecogniser:
 
     EMBEDDING_DIM = 512
 
-    def __init__(self, ctx_id: int = 0):
+    def __init__(self, ctx_id: int = 0, model_dir : str = None):
         print("[recogniser] Loading InsightFace ArcFace (w600k_r50) ...")
         try:
             import insightface.model_zoo as model_zoo
@@ -90,7 +90,11 @@ class InsightFaceRecogniser:
                 "Run: pip install insightface onnxruntime"
             )
 
-        home      = os.path.expanduser("~/.insightface/models")
+        if model_dir:
+            home = os.path.expanduser(model_dir)
+        else:
+            home = os.path.expanduser("~/.insightface/models")
+        
         onnx_path = os.path.join(home, ARCFACE_MODEL_REL)
 
         if not os.path.exists(onnx_path):
@@ -204,14 +208,14 @@ class SFaceRecogniser:
 
 # ── Factory ───────────────────────────────────────────────────────────────────
 
-def load_recogniser(sface_model_path: str = SFACE_MODEL_FILENAME):
+def load_recogniser(sface_model_path: str = SFACE_MODEL_FILENAME, model_dir: str = None,):
     """
     Returns the best available recogniser.
     Prefers InsightFace ArcFace; falls back to SFace if not installed.
     """
     if InsightFaceRecogniser.is_available():
         print("[recogniser] insightface found — using ArcFace buffalo_l")
-        return InsightFaceRecogniser()
+        return InsightFaceRecogniser(model_dir = model_dir)
     else:
         print("[recogniser] insightface not found — falling back to SFace")
         return SFaceRecogniser(sface_model_path)

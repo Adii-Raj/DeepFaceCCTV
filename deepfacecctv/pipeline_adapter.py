@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+import platform
+import subprocess
 
 # ── CRITICAL: Add project root to path BEFORE any builder imports ──
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -29,30 +31,32 @@ def run_pipeline(cfg: Config) -> None:
 
 
 def start_dashboard(cfg: Config) -> None:
-    """Start Flask dashboard with production WSGI server."""
-    try:
-        from dashboard.app import create_app
+    """Start Flask dashboard with production WSGI server (OS-aware)."""
+    is_windows = sys.platform == "win32" or platform.system() == "Windows"
+    
+    if is_windows:
+        # Windows: Waitress via subprocess
+        cmd = [
+            sys.executable,
+            "-m", "waitress",
+            "--threads=4",
+            f"--listen={cfg.flask_host}:{cfg.flask_port}",
+            "dashboard.app:app",
+        ]
+        server_name = "Waitress"
+    else:
+        # Linux: Gunicorn via subprocess
+        cmd = [
+            "gunicorn",
+            "-w", "2",
+            "-b", f"{cfg.flask_host}:{cfg.flask_port}",
+            "--timeout", "120",
+            "dashboard.app:app",
+        ]
+        server_name = "Gunicorn"
 
-        app = create_app(
-            db_path=cfg.db_path,
-            detections_db=cfg.output_db,
-            host=cfg.flask_host,
-            port=cfg.flask_port,
-        )
-    except ImportError:
-        from dashboard.app import app
-
-    # Use Waitress production server instead of Flask dev server
-    from waitress import serve
-
-    print(f"[dashboard] Starting production server on {cfg.flask_host}:{cfg.flask_port}")
-    serve(
-        app,
-        host=cfg.flask_host,
-        port=cfg.flask_port,
-        threads=4,
-        channel_timeout=30,
-    )
+    print(f"[dashboard] Starting {server_name} on {cfg.flask_host}:{cfg.flask_port}")
+    subprocess.run(cmd)
 
 
 # ── Gallery management ─────────────────────────────────────────────────────

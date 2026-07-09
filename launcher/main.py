@@ -319,7 +319,7 @@ class LauncherWindow(tk.Tk):
             messagebox.showerror("Import error", str(e))
 
     def _on_open_dashboard(self):
-        port = self._cfg.get("flask_port", 5000)
+        port = self._cfg.get("flask_port", 5002)
         self._svc.start_dashboard()  # ensures Flask is up
         import time; time.sleep(1)   # brief wait for Flask to bind
         webbrowser.open(f"http://localhost:{port}")
