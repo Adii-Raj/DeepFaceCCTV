@@ -604,6 +604,18 @@ def run(cfg: dict):
             else:
                 # Headless: just sleep to avoid busy loop
                 time.sleep(0.01)
+                frame_counter += 1
+
+                # Log every ~5 seconds (assuming ~30 FPS)
+                if frame_counter % 150 == 0 and last_frame is not None:
+                    logger.info(
+                        f"Running | DB: {gallery.embedding_count} identities | "
+                        f"Frame: {frame_counter}"
+                    )
+
+            # Reset to prevent overflow
+            if frame_counter > 1000000:
+                frame_counter = 0
 
     except KeyboardInterrupt:
         print("\n[pipeline] KeyboardInterrupt — shutting down …")

@@ -18,7 +18,7 @@ import sqlite3
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
-
+from core.app_logger import get_logger
 import numpy as np
 
 # ── DetectionLogger ───────────────────────────────────────────────────────────
@@ -56,6 +56,7 @@ class DetectionLogger:
         """
         self._db_path = db_path
         self._cooldown = cooldown
+        self._app_logger = get_logger("detection_db")
 
         # Per-person last-logged timestamp
         self._last_seen: dict[str, float] = {}
@@ -68,7 +69,7 @@ class DetectionLogger:
         self._cursor = self._conn.cursor()
         self._init_table()
 
-        print(f"[logger] SQLite -> {db_path}")
+        self._app_logger.info(f"SQLite -> {db_path}")
 
     # ── Database setup ────────────────────────────────────────────────────────
 
@@ -151,9 +152,9 @@ class DetectionLogger:
         """Close the SQLite connection."""
         try:
             self._conn.close()
-            print(f"[logger] Closed — {self._db_path}")
-        except Exception:
-            pass
+            self._app_logger.info(f"Closed — {self._db_path}")
+        except Exception as e:
+            self._app_logger.error(f"Close failed: {e}")
 
     # ── Stats ─────────────────────────────────────────────────────────────────
 
