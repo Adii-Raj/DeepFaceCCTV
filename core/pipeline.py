@@ -6,6 +6,7 @@ import sys
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
+from core.app_logger import get_logger
 from collections import deque
 from pathlib import Path
 import cv2
@@ -46,6 +47,8 @@ _global_stop = threading.Event()
 _embed_pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="embed")
 
 sys.stdout.reconfigure(line_buffering=True)
+
+app_logger = get_logger("pipeline")
 
 # ── Default config values ─────────────────────────────────────────────────────
 DEFAULTS = {
@@ -354,7 +357,10 @@ def _submit_embed(
             return
 
         # Embed — convert face crop to 512-number fingerprint
-        if use_insightface:
+        if recogniser is None:
+            app_logger.error("Recognizer is None — skipping embedding")
+            emb = np.zeros(512, np.float32)
+        elif use_insightface:
             emb = recogniser.embed(crop) if crop.size > 0 else np.zeros(512, np.float32)
         else:
             emb = recogniser.embed_with_landmarks(frame_snap, full_row)
@@ -405,6 +411,10 @@ def _process_worker(
 
     model_ready_event.wait()
     recogniser = recogniser_container[0]
+    if recogniser is None:
+        app_logger.error("Model failed to load, cannot process faces")
+        stop.set()
+        return
     use_insightface = isinstance(recogniser, InsightFaceRecogniser)
 
     while not stop.is_set():
@@ -519,9 +529,18 @@ def run(cfg: dict):
 
     def _load_model():
         try:
-            rec_container[0] = load_recogniser(cfg["sface_model"], model_dir = cfg.get("model_dir"))
+            model_dir = cfg.get("model_dir")
+            if model_dir and not os.path.isabs(model_dir):
+                # Resolve relative to project root (where pipeline.py is)
+                project_root = Path(__file__).resolve().parent.parent
+                model_dir = str(project_root / model_dir)
+
+            rec_container[0] = load_recogniser(cfg["sface_model"], model_dir=model_dir)
+            app_logger.info("Model loaded successfully")
         except Exception as e:
             load_err[0] = e
+            app_logger.error(f"Model load failed: {e}", exc_info=True)
+
         finally:
             model_ready.set()
 
@@ -619,7 +638,7 @@ def run(cfg: dict):
                 
                 # Log every ~5 seconds (assuming ~30 FPS)
                 if frame_counter % 150 == 0 and last_frame is not None:
-                    logger.info(
+                    app_logger.info(
                         f"Running | DB: {gallery.embedding_count} identities | "
                         f"Frame: {frame_counter}"
                     )

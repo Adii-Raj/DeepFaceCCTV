@@ -33,7 +33,7 @@ SFACE_MODEL_URL = (
 SFACE_MODEL_FILENAME = "face_recognition_sface_2021dec.onnx"
 DOWNLOAD_TIMEOUT = 30
 
-ARCFACE_MODEL_REL = "buffalo_l/w600k_r50.onnx"
+ARCFACE_MODEL_REL = "w600k_r50.onnx"
 
 
 # ── Model download helper ─────────────────────────────────────────────────────
@@ -93,7 +93,7 @@ class InsightFaceRecogniser:
         if model_dir:
             home = os.path.expanduser(model_dir)
         else:
-            home = os.path.expanduser("~/.insightface/models")
+            home = os.path.expanduser("~/.insightface/models/buffalo_l")
         
         onnx_path = os.path.join(home, ARCFACE_MODEL_REL)
 
