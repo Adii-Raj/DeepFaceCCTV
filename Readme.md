@@ -59,8 +59,8 @@ Survil/
 ### 1. Clone and set up
 
 ```bash
-git clone https://github.com/yourname/survil.git
-cd Survil
+git clone https://github.com/yourname/DeepfaceCCTV.git
+cd DeepfaceCCTV
 python -m venv venv
 
 # Windows
